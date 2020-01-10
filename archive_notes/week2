@@ -1,0 +1,178 @@
+When doing math you can do math operations directly in Python
+or you can assign a number to a variable and do math operations
+with variables. 
+
+To confirm its an integer
+
+my_num = 2
+type(my_num)
+
+Python 2 rounds up in division so you can do the below to have python 2 act like python 3 
+
+from __future__ import division
+
+In python 3 you can do // to make it act like python 2
+
+13 // 3
+
+You can convert an integer to float like
+
+float(my_num)
+2.0
+
+You can also round numbers as well
+round(my_num, 2)
+
+You can add 1 to a value in 2 ways
+my_num = my_num + 1
+my_num += 1
+
+** Files
+
+If you want to open a file in Python you can. This will look in the current path.
+
+f = open('show_version.txt')
+
+To read the file as a string you can
+
+output = f.read()
+print(output)
+
+After it is read and you want to get to the beginning you have to do a seek
+f.seek(0)
+
+To close the reference to the file
+f.close()
+
+If you want to read the file one line at a time
+
+f = open('show_version.txt')
+f.readline()
+
+If you want to return a list with all the lines of the file you can do either of the two options below.
+The difference is the readlines will retain the \n character
+
+a.)
+f = open('show_version.txt')
+f.readlines()
+
+b.)
+f = open('show_version.txt')
+output = f.read()
+output.splitlines()
+
+Python has a proper way to handle opening so that it automatically closes the file as well
+
+with open('show_version.txt') as f:
+    output = f.read()
+
+To create a file that does not exist and add text
+
+f = open('new_file.txt', mode='w')
+f.write('Some thing written\n')
+f.flush
+f.close()
+
+To append text to an existing file
+
+f = open('new_file.txt', mode='a')
+f.write('Some thing written\n')
+f.flush
+f.close()
+
+* Lists
+
+Common data type for dealing with sequential data
+
+my_list = [] 
+my_list = ['whatever', 22]
+
+To retrieve an element
+
+my_list[0] <- where 0 is the first and 1 is the second and so on
+
+To add something to the list
+my_list[2] = 'something'
+
+To see how many elements are in the list
+len(my_list)
+
+To add something to the end of a list
+
+my_list.append('hello')
+
+To concatinate elements to a list. 
+
+my_list + [2,3,'the']
+
+This will keep the original list the same so to modify the list you will need to
+
+my_list = my_list + [2,3,'the']
+
+You can also use extend to concatinate and this will modify the original list
+
+my_list.extend([2,3,'the'])
+
+To remove the last item in the last and return the value
+my_list.pop()
+
+To do the same from the begining of the list
+my_list.pop(0)
+
+To remove a particular item using the index
+
+del my_list[1]
+
+To count how many instances of a particular element exist
+
+my_list.count('hello')
+
+To see the first index where that occured
+
+my_list.index('hello')
+
+With list slices you can create a new list based on elements that are in a list. 
+
+output[0:5] <-- this will include the first element to the fourth element
+output[:5] <-- this is the same as above
+output[:] <-- this is the beginning to the end
+output[-4:]  <-- This will give you the fourth to the last element to the end
+
+Lists and Dictionaries are mutable data types meaning they can be changed. Strings tuples are not
+
+*Tuples
+
+These are lists that cannot be modified. Python allocates less memory for tuples.
+
+my_tuple = (2, 'whatever', 22.0)
+my_tuple[1]
+'whatever'
+
+You can convert a tuple to a list via the following
+
+my_var = list(my_tuple)
+
+*Splitting and joining
+
+The below can be used to split this IPv6 address based on the : and create a list out of each of the elements
+ipv6 = '2001:0db8:85a3:0000'
+words = ipv6.split(":")
+
+If we wanted to add each element of the list back into a string where we put 3 colons ::: between each element
+
+":::".join(words)
+
+*sys.argv
+
+When using sys.argv Python will take whatever command you type in when executing your script and make a list
+out of each of those words. 
+
+import sys
+print(sys.argv)
+
+*Linters
+
+pylint and pycodestyle are the two mose common linters. These can be run against your scripts to confirm
+that you are following pep8 complaince with your scripts. 
+
+pycodestyle test1.py | more

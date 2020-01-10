@@ -1,0 +1,116 @@
+Git is important because as we write code we need to keep track of this in a systamatic way.
+It also helps us move how we manage our infrastructure in a more programmatic way. In other
+words we could take changes we are about to implement and run unit tests against these changes.
+This moves us more towards Infrastructure as Code. With Git we make snapshots of files and directrories
+at the point of time that we make a commit.  
+
+cat ~/.gitconfig
+
+*Create the repo
+mkdir git-test
+cd git-test
+git init
+   OR
+git init BRANCHNAME
+ls -la <-- you should now see .git
+git status
+
+*Adding files to repo
+git add "filename or wildcard"
+git status
+git commit -m "give a usefull comment here"
+git status
+
+*Clone a github repository
+git clone [url]
+
+*Pushing changes to github "after you create files and commit them"
+git remote -v
+git branch
+git push origin master
+
+*Updating local branch when remote branch has made changes
+git remote -v
+git branch
+git pull origin master
+
+*Making changes
+git log
+git diff
+git diff [first-branch]...[second-brancnch]
+git show [commit]
+git add "filename or wildcard"
+git status
+git commit -m "give a usefull comment here"
+git status
+
+*Reverting changes
+If file is in staging area but not commited
+git reset HEAD [filename]
+rm [filename]
+
+If a file has changed its contents and has not been commited or staged
+git diff
+git checkout -- ./[filename]
+
+*Branches
+To create a branch base it on another and switch to that branch
+git checkout -b [newbranchname] [branchtobasethison]
+create a new branch
+git branch [branch-name]
+switch to the branch
+git checkout [branch-name]
+To push the new branch to github
+git status
+git push origin devel
+
+*Rebase
+If you are working off a branch that is based on another. And the branch you are basing yours
+on has some changes you do not have. You can rebase it to make your branch the same.
+git rebase master
+
+*Merging a change from remote to the master repository
+git merge [repository-name we are adding the change from]
+
+*Updating your local branch on a remote branches changes
+git fetch [remote-branch-name]
+git branch
+git checkout [branchname]
+If you checkout the branch and it says you are behind the remote branch by however many commits you can
+git rebase [remotebranch/branchname]
+git rebase origin/2.0
+
+*Typical Workflow
+
+git clone [url]
+git branch "to see our current branch"
+git branch -r "to see all remote branches"
+git checkout -b master origin/master "creates new branch and bases it on another"
+
+*Netmiko
+
+Simplifies the SSH login for variouse vendors "over 40 currently" for the puposes of
+automation. It will grab show command outputs and strip out anything you do not need such
+as router prompt. 
+
+*To install Netmiko
+pip install netmiko
+
+*Simple Netmiko script
+
+from netmiko import ConnectHandler
+
+device1 = {
+    "host": "cisco3.lasthop.io",
+    "username": "pyclass",
+    "password": password,
+    "device_type": "cisco_ios_telnet",
+}
+
+net_connect = ConnectHandler(**device1)
+print(net_connect.find_prompt())
+output = net_connect.send_command('show ip int brief')
+net_connect.disconnect()
+
+
+

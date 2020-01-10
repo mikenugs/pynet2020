@@ -1,0 +1,200 @@
+To make your code compatible between python 2 and 3 you can use the from future import function command. This one below is used to make printing compatible between python 2 and 3
+
+from __future__ import print_function
+
+Use the input function to take input from stdin
+
+ip_addr = input("Enter the IP address: ") <-- Python 3
+
+ip_addr = raw_input("Enter the IP address: ") <-- Python 2
+
+The below command will first try the Python 2 way and if that fails will try Python 3
+
+try:
+   ip_addr = raw_input("Enter the IP address: ")
+except NameError:
+   ip_addr = input("Enter the IP address: ")
+
+my_str = 'hello'
+dir(my_str) <-- shows all options for handling strings
+
+You can see more detailed info for each option by
+
+help(my_str.capitalize)
+
+To leverage one of these options you can call upon the function
+
+my_str.capitalize()
+
+You can add more than one built in string function by chaining them together
+
+my_str.upper().lower().capitalize()
+
+When you create a variable name for something Python creates an ID in memory for that item. You can view it by
+
+id(variable_name)
+
+ ----- Strings -----
+
+my_str = 'hello'
+type(my_str) <-- will confirm what python data type the variable is
+
+If it comes back as a <type 'str'> then it is essentially an ascii string which works good for english. Some languages have
+pictures that represent words so you may need unicode to represent them. In python you can specify unicode by
+
+my_str = u'whatever'
+
+In python3 strings default to unicode and in python 2 it defaults to ascii. In python3 to force your string to be ascii you
+need to specify it as a byte string.
+
+my_str = b'whatever'
+
+To force a python2 program to set strings as unicode you can use the below line
+
+from __future__ import print_function, unicode_literals
+
+* Comparisons "boleans"
+
+You can use the below comparisons to validate the value of a variable.
+
+equal to
+my_str == 'hello'
+True
+
+my_str == 'hi'
+False
+
+not equal to
+my_str != 'hi'
+True
+
+You can also look at wether or not a sub string is contained within a variable
+
+'he' in my_str
+True
+
+You can also confirm if something is not in
+
+'Mike' not in my_str
+True
+
+You can obtain a character in a string by specifying the variable name and a numberic value between brackets
+
+my_str[1]
+'e'
+
+To get the last character of the string
+
+my_str[-1]
+'e'
+
+You can also concatinate strings like below
+
+my_str = 'hello'
+name = 'mike'
+
+my_str + name
+hello mike
+
+When specifying things like a windows directory there are certain python characters like \n and \t that have special meaning and
+can give you unpredicatable results. To resolve that you can specify an r before the string to make it a raw string
+
+my_path = r"c:\windows\newdir\test_this\whatever"
+
+If you specify triple single or double qoutes you can have a multi line string
+
+my_str = '''this
+is my string
+on multiple lines'''
+
+If you want to look at the Python representation of the string you can do
+
+print(repr(my_str))
+
+The strip method can strip the whitespace. You can strip both sides the left side or the right
+
+my_str.strip()
+my_str.ltrip()
+my_str.rtrip()
+
+You can also split a string based on a character
+
+ip_addr = '192.168.1.1'
+ip_addr.split('.')
+
+ip_addr.split('192.168') <-- this will split based on more than a single character
+
+You can also split based on consecutive whitespace. In our example this will change the string
+to a list and each element is a word in the sentence.
+
+sentence = 'This is a test to split between words'
+sentence.split()
+
+You can also split based on newlines using either of these two ways
+
+paragraph.split("\n")
+paragraph.splitlines()
+
+*String formatting
+
+You can print out the strings like below one after the other
+
+ip_addr1 = '172.16.1.1'
+ip_addr2 = '172.31.17.99'
+ip_addr3 = '217.88.17.1'
+
+print(ip_addr1, ip_addr2, ip_addr3)
+
+172.16.1.1 172.31.17.99 217.88.17.1
+
+You can also custimize this by adding new lines and slashes
+print('\n')
+print('-' * 80)
+print(ip_addr1, ip_addr2, ip_addr3)
+
+This will replace the curly braces with the variables specified after the .format
+
+print('{}{}{}'.format(ip_addr1, ip_addr2, ip_addr3))
+
+With formating we can introduce spacing below we state we want a column that is 20 wide. Below will be left alligned
+
+print('{:20}{:20}{:20}'.format(ip_addr1, ip_addr2, ip_addr3))
+
+This will be right alligned
+
+print('{:>20}{:>20}{:>20}'.format(ip_addr1, ip_addr2, ip_addr3))
+
+This will center it
+
+print('{:^20}{:^20}{:^20}'.format(ip_addr1, ip_addr2, ip_addr3))
+
+You can also pased in named arguements as well
+
+print('{my_ip:^20}{ip:^20}{ip_alt:^20}'.format(ip_alt=ip_addr1, ip=ip_addr2, my_ip=ip_addr3))
+
+Here we split the IP address on the decimal to create a list of strings of each octet. Rathar then just
+printing the list we format it out with 10 spaces like below
+
+ip_addr2 = '172.31.17.99'
+octets = ip_addr2.split('.')
+print('{:10}{:10}{:10}{:10}'.format(octets[0], octets[1], octets[2], octets[3])
+
+If the printing is always exact based on the amount of formatters specified you can also simplify your code by
+using an * to tell python to not treat octets as a single list but rather look into the list for the values.
+
+print('{:10}{:10}{:10}{:10}'.format(*octets))
+
+You can also print out variables in your code using the following
+
+ip_addr2 = '172.31.17.99'
+
+print(f"My IP address is: {ip_addr2}")
+
+You can also use comumns to center it left or right justify
+print(f"My IP address is: {ip_addr2:^20}")
+
+You can also specify multiple variables
+
+ip_addr2 = '172.31.17.99'
+port = 80
+print(f"My IP address is: {ip_addr2:^20} {port:^8}")
