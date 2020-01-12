@@ -1,0 +1,179 @@
+* Conditionals
+Python will look at the expression and if it is True it will execute the code in the block. 
+
+if expression:
+    block
+    block
+    block
+    block
+elif expression:
+    block
+    block
+    block
+elif expression:
+    block
+else:
+    block
+
+* Booleans, Ternary Operator, None
+
+a= True
+type(a)
+bool
+
+Booleans are True False statements. If any compraison is False then the Boolean is False
+If you a
+Comparison Operators
+
+In programming, comparison operators are used to compare values and evaluate down to a single Boolean value of either True or False.
+
+== Equal to 
+!= Not equal to 
+< Less than 
+> Greater than 
+<= Less than or equal to 
+>= Greater than or equal to 
+
+
+* Logical Operators
+Operator | What it means                 | What it looks like
+
+and      |  True if both are true        | x and y 
+or       |  True if at least one is true | x or y 
+not      |  True only if false           | not x 
+
+(10 > 2)
+True
+
+(10>2) and (9 < 73) and (7==7)
+True
+
+if (10>2) and (9 < 73) and (7==7):
+    print("Hello")
+
+In Python it treats all strings as True except the Null string. With integers it treats 0 as 
+false and all other values are True. A null list is False but if it has any elements then it is
+True. This is the same for Dictionaries, Tuples, Floats... etc.
+
+* Ternary Operator
+
+A Ternary operator can set something based on something else. They are shorthand notation to if/else statements
+
+my_val = 10
+a = 'whatever' if my_val > 2 else 'something'
+
+* None
+
+None is a default return value from a python function if it does not return something. A boolean will 
+see these as being False
+
+* Loops
+
+With Loops you will loop through a block a code until you reach an exit condition
+
+There are two types of lists for and while
+When going through a loop each time it will grab an element from the list
+and that will be known as the variable name ip in this example. You can name 
+your variable anything and it will execute the code in the code block. The for loop
+will be complete when it runs out of elements in the list.
+
+ip_address = ['1.1.1.1', '2.2.2.2', '3.3.3.3']
+
+for ip in ip_address:
+    block
+
+ * Loops (Enumerate)
+
+If you need to keep track of the index in your list AND the value you can use the enumerate method.
+
+for my_var in enumerate(ip_address_list):
+    print(my_var)
+    break  <-- stops after the first one for testing
+
+This will give you back a tuple with the element and index
+(0, '1.1.1.1')
+
+Python has a nice way to assign tuples or lists to variables by unpacking them.
+Here we take my_var which has a tup-le with 0, and 1.1.1.1 and assign them to var1 and var2.
+
+var1, var2 = my_var
+
+Since we are using enumarate with our ip_address list it will have an index with the element.
+So when we loop across it we can use two values with the for loop.
+
+for i, ip_addr in enumerate(ip_address_list):
+    print(i)
+    print(ip_addr)
+
+* Loops (Break and Continue)
+
+Any time you hit the break statement it will immediatly break out of the loop.
+In this example it will print the first IP and then exit the for loop.
+
+ip_address = ['1.1.1.1', '2.2.2.2', '3.3.3.3', '4.4.4.4']
+
+for ip in some_list:
+    print(ip)
+    break
+
+In this example it will print out each IP address until it hits 3.3.3.3 then it will break out of the loop.
+
+for ip in some_list:
+    print(ip)
+    if ip == '3.3.3.3':
+        break
+
+In this example we are using continue. This will keep us in the for loop but will skip over 
+the element 3.3.3.3. The continue statement puts you right back into the next element of the list
+when a match condition occurs. So in the below example it will say hello then the ip for all of the
+IP's except for 3.3.3.3.
+
+for ip in some_list:
+    print('Hello')
+    if ip == '3.3.3.3':
+        continue
+    print(ip)
+
+With range it will count at 0 and then one less than the second number 
+
+list(range(0, 10))
+
+for my_var in range(10)
+   print(my_var)
+
+You can also check membership in a list 
+
+'1.1.1.1' in some_list
+True
+
+There is also a else that can be used with for statements.
+
+for ip in some_list:
+    print(ip)
+    if ip == '3.3.3.3':
+        break
+else:
+    print('Hit the else clause')
+
+* While Loops
+
+This is pythons second main looping construct. If the expression is True you will loop through the code block as long as it is True. When False you will execute the code block. 
+You can also exit the loop through a break statement. 
+
+f = open('show_version.txt')
+i = 0
+
+while i <= 5:
+    line = f.readline()
+    line = line.strip()
+    print(line)
+    i += 1 <---- This will increment i each time through the loop.
+
+It is also common to use while True which is always true and will run infnitatly. To prevent it from running infinitatly you need to carefully plan your break statements to exit the loop.
+
+while True:
+    print('hello')
+    print('world')
+    if google_dns1 == '3.3.3.3'
+         break
+
