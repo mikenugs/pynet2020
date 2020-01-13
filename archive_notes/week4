@@ -1,0 +1,150 @@
+* Dictionaries
+
+Sometimes known as HashMaps in other languages and provides a key/value pair. Lists provide an index# for each element. 
+
+net_dev= {}  <-- empty dictionary
+
+net_dev['ip_addr'] = '1.1.1.1'
+
+or you can do
+
+net_dev = {'ip_addr': '1.1.1.1'}
+
+You can also use a variable for a key
+
+var1 = 'vendor'
+net_dev[var1] = 'cisco'
+
+Dictionaries do not keep elements in any particular order
+
+To access a value in the dictionary you can specify the dictionary and key
+
+net_dev['ip_addr']
+
+If you try and access a key that does not exist you will get a KeyError. They are also mutable so they can be modified. 
+
+You can use the .get to return a value of None in the case they key does not exist
+
+net_dev.get('ip_addr')
+
+You can also change the default value in this example we set it to 2.2.2.2
+
+net_dev.get('ip_addr', '2.2.2.2')
+
+You can copy a dictionary using copy
+
+net_dev2 = net_dev.copy()
+
+You can pop out an element and return the value to you so it is no longer in the dictionary but it gives you the value for the key
+
+net_dev.pop('ip_addr')
+
+You can also update key value pairs from one dictionary to the other. The below command will take all the key value pairs from net_dev2 and update the net_dev dictionary with those.
+
+net_dev.update(net_dev2)
+
+To loop over the keys in a dictionary you can do 
+
+for key in net_dev:
+     print(key)
+
+To loop over the values in a dictionary you can
+
+for v in net_dev.values():
+     print(v)
+
+To loop over they key and values you can do a
+
+for k, v in net_dev.items():
+    print(k)
+    print(v)
+
+* Sets
+
+Sets are a python data type that is unordered and also unique in that there will be no duplicate elements.
+
+my_ips = ['1.1.1.1', '2.2.2.2', '3.3.3.3', '4.4.4.4', '1.1.1.1']
+
+set(my_ips)
+{'1.1.1.1', '2.2.2.2', '3.3.3.3', '4.4.4.4'}
+
+A set union will compare two different sets and only show what is unique to those sets
+
+my_ips | my_ips2
+OR
+my_ips.union(my_ips2)
+
+If you want what is common to both sets then you can perform the following called an intersection
+
+my_ips & my_ips2
+OR
+my_ips.intersection(my_ips2)
+
+You can also remove anything that is duplicate from the second set and keep anything that is unique on the first set by doing a difference
+
+my_ips - my_ips2
+OR
+my_ips.difference(my_ips2)
+
+You can also do a symmetric differences that will only give you unique things on each of the sets. It only removes the common things between the sets.
+
+my_ips ^ my_ips2
+OR
+my_ips.symmetric_difference(my_ips2)
+
+* Exceptions
+
+You can use try/except to catch errors in your code. In the below program the dictionary is empto so we get a key error. We create an except for the key error and then execute the code in that block instead of the code in the try block.
+
+my_dict = {}
+
+try:
+    print('Statement before')
+    my_dict['ip_addr']
+    print('Statement after')
+except KeyError:
+    print('Caught exception')
+
+print('After exception')
+
+You can also handle multiple exceptions as well. In the below example we try and access a list index that does not exist as well as a key that does not exist. This will work if you hit both errors or if any of just one of the errors. 
+
+my_dict = {}
+my_list = []
+try:
+    my_list[0]
+    my_dict['ip_addr']
+except (KeyError, IndexError):
+    print("Handling multiple potential exceptions")
+
+You can also split up the except statements on the two different errors
+
+except (KeyError):
+    print("Handling multiple potential exceptions")
+except (IndexError):
+    print("Do something else")
+
+The finally clause executes wether we get an exception or not
+
+my_dict = {}
+
+try:
+    print('Statement before')
+    my_dict['ip_addr']
+    print('Statement after')
+except KeyError:
+    print('Caught exception')
+finally:
+     print('This is always executed, exception or not')
+
+You can also catch any exception even if you do not know what exception error you are about to get by using the Exception with except
+
+my_dict = {}
+
+try:
+    print('Statement before')
+    my_dict['ip_addr']
+    print('Statement after')
+except Exception:
+    print('Caught exception')
+
