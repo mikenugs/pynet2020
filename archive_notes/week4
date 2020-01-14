@@ -148,3 +148,83 @@ try:
 except Exception:
     print('Caught exception')
 
+* ReGex
+
+In the below example we search the string ip_addr based on the pattern to the left
+
+
+ip_addr = '       10.1.1.1     '
+
+import re
+
+re.search(r".", ip_addr)
+
+To see what you matched inits entirety
+
+re.search(r".", ip_addr).group(0)
+
+If you want to cut the output so in this example it only has the IP's without the whitespace. The regex between the () will be group1 and the regex before will be group(0). The r" that we use in the RegEx makes it a raw string which is needed because Python typically looks at things with \ for example and ignores that with raw strings. 
+
+re.search(r"^s+(\S+)", ip_addr).group(1)
+
+
+Here we open up a file that has a show version from a Cisco. We then take that output and save it as a string called output. Then we take the string and create a list called show_ver with each line being an element in the list. 
+
+with open("show_version.txt") as f:
+    output = f.read()
+
+show_ver = output.splitlines()
+
+Here we take the first line in the list and name it line
+
+line = show_ver[0]
+
+Here wre go through that first line and match just the portion in the line that matched 15.4T. Since that part of our RegEx is between () it will show up in group(1)
+
+re.search(r"^Cisco.*, Version (\S+),.*$", line).group(1)
+
+You can also save this value that is in the group within into a dictionary type data format by using ?P<NAME_OF_KEY> between the () of the RegEx we are matching.
+
+re.search(r"^Cisco.*, Version (?P<serial_num>\S+),.*$", line).groupdict()
+{'serial_num': '15.4(2)T1'}
+
+OR
+
+match = re.search(r"^Cisco.*, Version (?P<serial_num>\S+),.*$", line)
+match.groupdict()
+{'serial_num': '15.4(2)T1'}
+
+In the below example the .* is greedy and matches the rest of the line. 
+
+re.search(r"^Cisco.* (.*), " line)
+
+In our example from above our text has two , and it will match all the way to the second since regex acts greedy by default. To make it not act greedy we can use a ? in our regex so it is less greedy and only matches to the first comma. 
+
+re.search(r"^Cisco.* (.*?), " line)
+
+If we had a large string and we only wanted to match something that was in the middle of the string. Here we look for processor board at the middle of the string and match the value that shows up after that in parantesis. The $ takes it to the end. Since the processor board is in the middle and we are using ^ to anchor we can specify a flag with regex called re.M which makes it multiline and it will search each line for that pattern.
+
+
+serial_num = re.search(r"^Processor board ID (.*)$", output, flags=re.M).group(1)
+
+By default the .* will not cross a newline so this below Regex will just get Cisco from the first line and everything after. You can change this behavior by using the flag re.DOTALL. 
+
+re.search(r"^Cisco.*, output, flags=re.DOTALL).group(0)
+
+There is also a flag called re.I which will ignore capitilization
+
+re.search(r"^Cisco.*, output, flags=re.I).group(0)
+
+Instead of doing a split on a string you can also do a regex split as well. 
+
+re.split(r"^------------.*$", output, flags=re.M)
+
+This will return a list for everything in output and will also capture the data that is between the two lines that have -------------. To see what it captured you can do a 
+
+re.split(r"^------------.*$", output, flags=re.M)[1]
+
+You can also use RegEx to make replacements as well. Here we replace ----- with #### Whatever.
+
+new_output = re.sub(r"^------------.*$", '######## WHATEVER ########', output, flags=re.M)
+
+If you wanted to search through a large string which have a ton of e-mail addresses and pull up all of the e-mail addresses you can use the re.findall
