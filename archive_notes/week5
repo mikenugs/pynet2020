@@ -1,0 +1,177 @@
+* Functions
+
+
+Defining and calling a function
+
+def print_ip():
+    print("My IP address is 11.1.1.1")
+
+
+print_ip()  <--- This calls the function
+
+Functions always have a return value even if it is none like in the below example
+
+def print_ip():
+    print("My IP address is 11.1.1.1")
+
+
+return_val = print_ip()
+print(return_val)
+print(type(return_val))
+
+Passing arguements to a function. Here we pass two IP's and a username and password to print out. These arguements are mapped via position.
+
+def print_ip(ip_addr, username, password):
+    print("My IP address is {}".format(ip_addr))
+    print(username)
+    print(password)
+    return
+
+print_ip('10.100.1.1', 'admin', 'pass123')
+print_ip('10.100.1.100', 'admin', 'pass123')
+
+You can also specify the named arguments so you do not have to worry about the order it is passed. You can mix and match between named and positional arguments. 
+
+def print_ip(ip_addr, username, password):
+    print("My IP address is {}".format(ip_addr))
+    print(username)
+    print(password)
+    return
+
+print_ip(ip_addr='10.100.1.1', password='admin', username='pass123')
+
+You can also have default values passed in to your function as well so you do not have to pass them when you call upon your function
+
+
+def print_ip(ip_addr, username=admin, password='cisco123'):
+    print("My IP address is {}".format(ip_addr))
+    print(username)
+    print(password)
+    return
+
+print_ip('10.100.1.1')
+
+You can also pass an entire list to your function as well. If you do not put a * before the list name in the function call then it will put the entire list in the first positional argument. To have Python strip the elements of the list and send each element in a different place of the positional argument you can put a * before the list name in the function call. 
+
+def print_ip(ip_addr, username=admin, password='cisco123'):
+    print("My IP address is {}".format(ip_addr))
+    print(username)
+    print(password)
+    return
+
+my_list = ['10.1.1.1', 'admin', 'cisco123']
+
+print_ip(*my_list)
+
+You can also do the same thing with a dictionary. But with a dictionary you want to pass in all of the key value pairs mapping the key to the argument so the value matches up correctly. With a dictionary you do a ** prior to the dictionary name in the function call. 
+
+def print_ip(ip_addr, username=admin, password='cisco123'):
+    print("My IP address is {}".format(ip_addr))
+    print(username)
+    print(password)
+    return
+
+my_list = {'ip_addr': '10.1.1.1', 'username': 'admin', 'password': 'cisco123'}
+
+print_ip(**my_list)
+
+Variable names in a function are local to the function so you can have the same variable name in different parts of your code with different values. This concept is called namespaces. 
+
+You can reference a variable name within a function that is not defined within the function. Python will look in its Global namespace outside of the function to find it. And if it still does not find it then Python will look within its built ins. If it is not found there it will generate an exception.
+
+* Class
+
+A class can let you pass shared information between them for shared state. Within a class you call those functions methods. You can also create a hirearchy where you have child classes based on parent classes.
+
+class MyClass(object):
+    def __init__(self, ip_addr, username, password):
+
+Importing a module in this exampple we have a script called my_func.py and it has a function or class called print_ip
+
+import my_func
+dir(my_func)
+my_func.print_IP('1.1.1.1')
+
+You can also import a module and function by doing the below. This way you do not have to specify the module name and then a . before the function name.
+
+from my_func import print_ip
+print_ip('1.1.1.1')
+
+* List comprehension
+
+This is used to Transform a list from one form to another. In the below example we square each number in the list my_list.
+
+my_list = [1,2,3,4,5,6]
+
+my_list = [x**2 for x in my_list]
+
+* Lambda is a disposable one line function.
+
+f = lambda x: x**2
+print(f(10))
+
+To see where Python looks to import files
+
+import sys
+from pprint import pprint
+pprint(sys.path)
+
+Changing colors in ipython
+
+%colors LightBG
+
+* Python debugger
+With the python debugger you can set breakpoints by specifying pdb.set_trace()
+
+import pdb
+
+def print_ip(ip_addr, username=admin, password='cisco123'):
+    print("My IP address is {}".format(ip_addr))
+    print(username)
+    print(password)
+    return
+
+pdb.set_trace()
+print_ip('10.100.1.1')
+
+To see where you are at with the programmer you can do
+list .
+
+To specify the lines to list you in this example lines 1-20
+list 1, 20
+
+To step into the next line you can
+s
+
+To see arguments passed into a function you can
+args
+
+To print or pretty print
+p ip_addr
+pp ip_addr
+
+To go back out of a function to the line that called it
+up
+
+To go back down to the next line
+down
+
+To go to the return value of the function
+return
+
+You can also leverage the python debugger by
+
+python -m pdb my_func.py
+
+To go to the next line in the program "this will not go into the function". Step will go into the function
+n
+
+To set a breakpoint at line 10
+b 10
+
+You can change values for variable by using !
+!username='cisco'
+
+To see the new value of the name you changes
+p username
+
