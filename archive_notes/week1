@@ -198,3 +198,6 @@ You can also specify multiple variables
 ip_addr2 = '172.31.17.99'
 port = 80
 print(f"My IP address is: {ip_addr2:^20} {port:^8}")
+
+Here is an example where we print out text as well as a specific element within a list that has a dictionary key value.
+print('HPE Switch Connection Port: {}'.format(showlldp[0]['neighbor_interface']))
