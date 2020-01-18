@@ -78,6 +78,9 @@ cd ~/templates
 ls
 ls index
 
+To see which templates are available
+cat ~/ntc-templates/templates/index | grep cisco_ios
+
 You can also set an environmental variable so Netmiko can find the templates
 export NET_TEXTFSM=/path/to/ntc-templates/templates/
 
@@ -180,3 +183,13 @@ device1 = {
 * To see how long it takes a script to run
 
 date; python script.py; date
+
+Or you can add it to your script
+
+from datetime import datetime
+
+start_time = datetime.now()
+{THEN PUT YOUR CODE BLOCK}
+end_time = datetime.now()
+print("\n\nExecution Time: {}".format(end_time - start_time))
+
