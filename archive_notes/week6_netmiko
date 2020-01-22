@@ -1,0 +1,154 @@
+* NetMiko
+
+Paramiko is the standard Python SSH library primarily for server to server communication. NetMiko is built on ParaMiko but geared more towards network vendors and has broad support about 45 vendors. There are other Python libraries such as Trigger and PExpect that do similar things as NetMiko. 
+
+from netmiko import Netmiko
+OR
+from netmiko import ConnectHandler
+
+net_conn = Netmiko(host='cisco1.twb-tech.com, username='user',
+                  password=getpass(), device_type='cisco_ios')
+
+print(net_conn.find_prompt())
+
+You can also specify the device information using a dictionary
+
+cisco1 = {
+	'host': 'cisco1.twb-tech.com',
+	'username': 'user',
+	'password': getpass(),
+	'device_type': 'cisco_ios'
+}
+
+net_conn = Netmiko(**cisco1)
+print(net_conn.find_prompt())
+
+* To figure out the device types put an invalid Device Type
+
+	'device_type': 'XXXXXX'
+
+* If you need to enter enable mode on the router 
+
+cisco1 = {
+	'host': 'cisco1.twb-tech.com',
+	'username': 'user',
+	'password': getpass(),
+	'device_type': 'cisco_ios',
+	'secret': 'password'       <-- add a secret to your device dictionary
+}
+
+net_conn.enable() <-- to enter enable mode
+
+* Show commands on devices
+Send command looks for the trailing router prompt to know when the command has finished executing
+
+output = net_conn.send_command('show arp')
+print(output)
+
+To see the arguments for send_command
+dir(net_conn.send_command)
+
+* To use NetMiko with multiple devices
+
+cisco1 = {
+	'host': 'cisco1.twb-tech.com',
+	'username': 'user',
+	'password': getpass(),
+	'device_type': 'cisco_ios'
+}
+arista1 = {
+	'host': 'arista1.twb-tech.com',
+	'username': 'user',
+	'password': getpass(),
+	'device_type': 'arista_eos'
+}
+srx1 = {
+	'host': 'srx1.twb-tech.com',
+	'username': 'user',
+	'password': getpass(),
+	'device_type': 'juniper_junos'
+}
+
+for device in (cisco1, arista1, srx1):
+    net_conn = Netmiko(**device)
+    output = net_conn.send_command('show arp')
+    print(output)
+
+* Handling multiline procession
+
+NetMiko looks for the training router prompt so when there is a multiline command such as an extended ping or deleting file from flash you do not recieve the router prompt when executing the command. 
+
+One way to do this is using NetMiko and send command_timing
+
+filename = 'small_file.txt'
+cmd = 'delete flash:{}'.format(filename)
+
+output = net_conn.send_command_timing(cmd)
+if 'confirm' in output:
+    output += net_conn.send_command_timing('\n')
+net_conn.disconnect()
+
+* To add additional time when executing a command so it does not time out. The number is a multiplier. You can use this for send command or send command timing. 
+
+output = net_conn.send_command_timing(cmd, delay_factor=2)
+
+* Global delay can also be used to increase all the delays in NetMiko. This number is a multiplier as well.
+
+srx1 = {
+	'host': 'srx1.twb-tech.com',
+	'username': 'user',
+	'password': getpass(),
+	'device_type': 'juniper_junos',
+	'global_delay_factor': 2    <--- setting the global delay
+}
+
+* Using TextFSM
+
+NetMiko will give you back unstructured data essentially a string when it runs a command. NTC has created TextFSM templates for many vendors show commands that can be leveraged with NetMiko. NTC Templates needs to be installed in your home directory for this to work. You can also try setting an environmental variable if the templates are not in your home directory.
+
+export NET_TEXTFSM=~/ntc-templates_foo2/templates
+
+To confirm environmental variable is setup
+env | grep NET_TEXT
+
+Cloning the NTC templates repository
+git clone https://github.com/networktocode/ntc-templates.git
+
+output = net_conn.send_command('show ip arp', use_textfsm=True)
+
+from there you can drill down into the data structure using common pythonic command syntax
+
+len(output)
+print(output[0])
+print(output[0].keys())
+
+* Config Changes
+
+You can use send_cfg_set to send a single string or a list of commands to execute. This works for multivendors such as Cisco and Juniper.
+
+cfg_commands = ['logging buffered 1000', 'no logging console']
+output = net_connect.send_config_set(cfg_commands)
+print(output)
+
+With Juniper you will need to commit the change
+
+output = net_connect.commit()
+
+With Cisco there is a save_config that will save the config.
+
+You can also send the config from a text file as well.
+
+output = net_connect.send_config_from_file('change_conf.txt')
+print(output)
+
+* Troubleshooting
+
+
+
+You can use write channel in interactive python mode to execute commands
+net_conn.write_channel('show ip arp\n')
+
+To read that output from the write channel you can do a read_channel
+output = net_conn.read_channel()
+print(output)
+

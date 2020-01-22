@@ -1,0 +1,416 @@
+* Jinja 2
+
+With networking you typically have a configuration that needs to be pushed. This config will have variables such as IP address, vlans... etc. The variables may come from CSV or some other system and they need to be populated in the template. The result will be an output file with the variables populated in the configuration. This pattern is also common with web programming. Jinja2 is Pythons templating library. You use {{}} notation when using jinja2.
+
+Basic Jinja2 example
+
+import jinja2
+
+bgp_vars = {
+	'local_as': 11,
+	'neighbor_ip': '1.1.1.2',
+	'remote_as': 22,
+}
+
+
+bgp_template = '''
+router bgp {{ local_as }}
+  neighbor {{ neighbor_ip }} remote-as {{ remote_as }}
+'''
+
+t = jinja2.Template(bgp_template)
+print(t.render(bgp_vars)) <-- here we pass in the BGP variables to the rendered template
+
+* Jinja2 template outside of Python file
+
+!nxos_bgp.j2
+router bgp {{ local_as }}
+  neighbor {{ neighbor_ip }} remote-as {{ remote_as }}
+!nxos_bgp.j2
+
+------
+
+template_file = 'nxos_bgp.j2'
+with open(template_file) as f:
+    bgp_template = f.read()
+
+t = jinja2.Template(bgp_template)
+print(t.render(bgp_vars))
+
+* For Loops within Jinja2
+
+In this example we have a list within our python script everything else is the same.
+
+advertised_routes = ['10.10.10.0/24','10.10.20.0/24','10.10.30.0/24']
+
+bgp_vars = {
+	'local_as': 11,
+	'neighbor_ip': '1.1.1.2',
+	'remote_as': 22,
+}
+
+template_file = 'nxos_bgp.j2'
+with open(template_file) as f:
+    bgp_template = f.read()
+
+t = jinja2.Template(bgp_template)
+print(t.render(bgp_vars))
+
+You can remove the spacing added by the for statements by adding a - after the {%
+
+!nxos_bgp.j2
+router bgp {{ local_as }}
+  neighbor {{ neighbor_ip }} remote-as {{ remote_as }}
+  {%- for route in advertised_routes %}
+  network {{ route }}
+  {%- endfor %}
+!nxos_bgp.j2
+
+* Using conditionals with Jinja2
+
+bgp_vars = {
+	'local_as': 11,
+	'neighbor_ip': '1.1.1.2',
+	'remote_as': 22,
+	'peer1_ipv6': True,  <-- here we set this variable to True
+	'advertised_routes': advertised_routes,
+}
+
+advertised_routes = ['10.10.10.0/24','10.10.20.0/24','10.10.30.0/24']
+
+template_file = 'nxos_bgp.j2'
+with open(template_file) as f:
+    bgp_template = f.read()
+
+t = jinja2.Template(bgp_template)
+print(t.render(bgp_vars))
+
+!nxos_bgp.j2
+router bgp {{ local_as }}
+  neighbor {{ neighbor_ip }} remote-as {{ remote_as }}
+  {%- for route in advertised_routes %}
+  network {{ route }}
+  {%- endfor %}
+  {% if peer1_ipv6 -%}  <-- Since this is True it will add the below lines of code.
+  address-family ipv6 unicast
+  {% endif %}
+!nxos_bgp.j2
+
+* Jinja2 and CSV files for variables
+When reading CSV files the first row will be the key the second the value. If you are doing a list do not put a comma between each element in the list just a space. 
+
+
+!nxos_bgp.j2
+router bgp {{ local_as }}
+  neighbor {{ neighbor_ip }} remote-as {{ remote_as }}
+  {%- for route in advertised_routes %}
+  network {{ route }}
+  {%- endfor %}
+  {% if peer1_ipv6 -%}  <-- Since this is True it will add the below lines of code.
+  address-family ipv6 unicast
+  {% endif %}
+!nxos_bgp.j2
+
+The below CSV config will give you three different BGP peer configs
+
+!bgp_variables.csv
+local_as, peer1_ip, peer1_as, peer1_ipv6, advertised_routes
+10, 10.255.255.2, 20, True, 10.10.200.0/24 10.10.201.0/24 10.10.202.0/24
+10, 10.255.255.5, 21, True, 10.10.200.0/24 10.10.201.0/24 10.10.202.0/24
+10, 10.255.255.6, 22, True, 10.10.200.0/24 10.10.201.0/24 10.10.202.0/24
+!bgp_variables.csv
+
+!Python script
+
+import jinja2
+import csv
+
+csv_file = 'bgp_variables.csv'
+with open(csv_file) as f:
+    read_csv = csv.DictReader(f)
+    for bgp_vars in read_csv:
+        advertised_routes = bgp_vars['advertised_routes']
+        advertised_routes.split() <-- here we split the advertised routes to a list
+        bgp_vars['advertised_routes'] = advertised_routes <-- we then reassign the list to bgp_vars
+
+        template_file = 'nxos_bgp.j2'
+        with open(template_file) as f:
+            bgp_template = f.read()
+
+        t = jinja2.Template(bgp_template)
+        print(t.render(bgp_vars))
+
+* Using Dictionaries and Nested Loops in Jinja2
+
+bgp_vars = {
+	'routers': {
+    'sf_rtr1': '10.10.10.2',
+    'sf_rtr2': '10.10.10.3',
+    'la_rtr1': '10.100.17.1',
+	},
+}
+
+z_template = '''
+{%- for router_name, ip_address in routers.items() %}
+{{ router_name }} >>> {{ ip_address }}
+{%- endfor %}
+
+t = jinja2.Template(z_template)
+print(t.render(bgp_vars))
+
+
+* Looping over a Dictionary with a nested list
+
+bgp_vars = {
+	'routers': {
+    'sf_rtr1': '10.10.10.2',
+    'sf_rtr2': '10.10.10.3',
+    'la_rtr1': '10.100.17.1',
+	},
+	'ip_list': [
+	    '192.168.1.1',
+	    '10.1.1.1',
+	    '172.16.1.1',
+	    ]
+}
+
+z_template = '''
+{%- for router_name, ip_address in routers.items() %}
+{{ router_name }} >>> {{ ip_address }}
+{%- endfor %}
+{%- for ip_addr in ip_list %}
+{{ ip_addr }}
+{%- endfor %}
+
+t = jinja2.Template(z_template)
+print(t.render(bgp_vars))
+
+* Nested for loop with Dictionary and List in Jinja2
+
+
+
+bgp_vars = {
+	'routers': {
+    'sf_rtr1': '10.10.10.2',
+    'sf_rtr2': '10.10.10.3',
+    'la_rtr1': '10.100.17.1',
+	},
+	'ip_list': [
+	    '192.168.1.1',
+	    '10.1.1.1',
+	    '172.16.1.1',
+	    ]
+}
+
+z_template = '''
+{%- for router_name, ip_address in routers.items() %}
+{{ router_name }} >>> {{ ip_address }}
+   {%- for ip_addr in ip_list %} <-- this is run each time through the loop
+   {{ ip_addr }} 
+{%- endfor %}
+{%- endfor %}
+
+t = jinja2.Template(z_template)
+print(t.render(bgp_vars))
+
+* Nested for loop with Dictionary and List in Jinja2 using Conditionals
+
+
+
+bgp_vars = {
+	'routers': {
+    'sf_rtr1': '10.10.10.2',
+    'sf_rtr2': '10.10.10.3',
+    'la_rtr1': '10.100.17.1',
+	},
+	'ip_list': [
+	    '192.168.1.1',
+	    '10.1.1.1',
+	    '172.16.1.1',
+	    ]
+	'ipv6_enabled': = False,  <-- Here we add the conditional
+	'ipv4_enabled': = True,  <-- Here we add the conditional
+}
+
+z_template = '''
+{% if ipv6_enabled &}
+IPv6 is enabled
+{% elif ipv4_enabled %}
+IPv4 is enabled
+{%- else %}
+IPv6 is disabled
+{%- endif %}
+'''
+
+
+t = jinja2.Template(z_template)
+print(t.render(bgp_vars))
+
+* Referencing a router key within a dictionary with Jinja2
+
+bgp_vars = {
+	'routers': {
+    'sf_rtr1': '10.10.10.2',
+    'sf_rtr2': '10.10.10.3',
+    'la_rtr1': '10.100.17.1',
+	},
+	'ip_list': [
+	    '192.168.1.1',
+	    '10.1.1.1',
+	    '172.16.1.1',
+	    ]
+	'ipv6_enabled': = False,  
+	'ipv4_enabled': = True,  
+}
+
+z_template = '''
+    { routers['sf_rtr1'] }
+'''
+
+OR
+
+z_template = '''
+    { routers.sf_rtr1 }
+'''
+
+t = jinja2.Template(z_template)
+print(t.render(bgp_vars))
+
+* YAML yaml aint markup language / yet another markup language
+
+Data in programs may need to be written to a file or sent to another computer. When taking this data it needs to be serialized into a byte stream. So it will need to take data structures and convert them to a stream of bytes that needs to be understood by another computer or potentially by the same computer. This process is known as serialization and YAML, JSON and XML, GPB is another example os a serialization protocol. YAML is different because it is highly readable. So if there is human interaction readability matters and is a good choice when choosing one of these protocols. This is also used by both Ansible and Salt. Spacing is important in YAML just like Python
+
+!Example loading YAML list into Python
+
+!example.yml
+---
+
+- LISTELEMENT0
+- LISTELEMENT1
+- LISTELEMENT2
+- LISTELEMENT3
+!example.yml
+
+import yaml
+
+filename = 'example.yml'
+with open(filename) as f:
+    output = yaml.load(f)
+
+print(output)  <-- When printing you will see a Python data structure
+print(output[2])
+
+!Dictionary format in YAML
+
+!example.yml
+---
+rtr1: 10.1.1.1
+rtr2: 10.1.1.2
+rtr3: 10.1.1.3
+rtr4: This is a longer stringer that corresponds to a string. Can be qouted or not.
+rtr5: True    <--- to create a boolean True/False
+rtr6: yes     <--- this is also a boolean yes/no
+rtr7: off     <---- this is also a boolean on/off
+rtr8: 100     <---- Integer
+!example.yml
+
+import yaml
+
+filename = 'example.yml'
+with open(filename) as f:
+    output = yaml.load(f)
+
+print(output)  
+print(output['rtr1']) <-- Printing out the value for the rtr1 key
+
+* Nested Dictionaries in YAML
+
+Here we have a dictionary with a key rtr1: and the value is a dictionary with the key value pairs that are indented below. The second router rtr2 is another dictionary with the value being a dictionary with key value pairs that are indented. There is also a list as the value of the key bgp_peers under rtr2.
+
+---
+rtr1:
+   ip_addr: 10.1.1.1
+   username: user
+   password: whatever
+   device_type: juniper_junos
+
+rtr2:
+   ip_addr: 10.1.1.2
+   username: user
+   password: whatever
+   device_type: cisco_ios
+   bgp_peers:
+     - 100.10.1.1
+     - 100.10.1.2
+     - 100.10.1.3
+      OR
+    bgp_peers: [100.10.1.1, 100.10.1.2, 100.10.1.3]
+rtr3: {ip_addr: 10.1.1.33}  <-- You can optionally create a dictionary in compressed form.
+
+* Writing a file to YAML in Python
+
+import yaml
+
+my_dict = {
+	'rtr1': '10.1.1.1'
+}
+
+filename = 'output.yml'
+
+with open(filename, 'w') as f:
+    output = yaml.dump(my_dict, f, default_flow_style=False) <-- the flow style changes wether it will be in expanded form or compressed form. If set to True the data structure would look more like Json or a native Python data type. 
+
+* JSON Java Script Object Notation
+
+Is another serialization protocol that is responsible for taking data sets and converting them to a byte stream and outputting that to another file or another computer. The appearance of the data structure is very similar between Python and JSON. JSON is used by allot of API's for vendors such as Arista and Nexus. Allot of Rest API's use JSON as well. 
+
+!Here we save the python data structure my_dict to a json format file called my_file.json
+
+import json
+
+my_dict = {
+	'rtr1': '10.1.1.1'
+}
+
+with open('my_file.json', 'w') as f:
+    json.dump(my_dict, f, indent=4)
+
+!Here we open up a json file and print it out. The data will be Python data structure. 
+
+from pprint import pprint
+import json
+
+filename = 'my_file.json'
+
+with open(filename) as f:
+    json_data = json.load(f)
+
+pprint(json_data)
+
+* Complex data structures in Python
+
+Complex data structures are typically nested dictionaries and lists which can go several levels in depth. You will recieve these nested complex data structures from API's. 
+
+You can see what the outer must data type is visually when looking at it as well as using type
+
+type(routers)
+dict
+
+You want to peel back the onion one layer at a time. With dictionaries you can start by looking at the keys
+
+routers.keys()
+
+You can then peel back these keys one at a time here we get a key back for three routers rtr1, rtr2 and rtr3 we start by looking at the keys for rtr1
+
+routers['rtr1']
+
+routers['rtr1'].keys()
+
+routers['rtr1']['bgp_peers']
+
+We got a list back from the bgp peers so lets check the length
+
+len(routers['rtr1']['bgp_peers'])
+
+Here we extract the first element in the list.
+routers['rtr1']['bgp_peers'][0]
