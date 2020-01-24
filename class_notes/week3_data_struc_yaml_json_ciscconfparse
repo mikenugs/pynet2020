@@ -1,0 +1,289 @@
+* Complex Data Structures
+
+These are dictionaries and lists that have nested lists and dictionaries within them. 
+
+When dealing with these data structures you can either look at the data to see what the outside bracket says it is ie.. [] or {} or you can do the below to find out what it is.
+type(structure_name)
+
+If it is a list find out the length of the list
+len(structure_name)
+
+If it is a lenth of 1 you can just grab the first entry
+structure_name[0]
+
+If you only have one entry you can pop the list by
+new_structure = structure_name[0]
+print(new_structure)
+
+Assuming you are getting back dictionaries you can look at the keys
+print(new_structure.keys())
+
+You can then look at the values for each key
+print(new_structure['interfaces'])
+
+When we find the interesting data back from one of the keys you can peel the result back
+interfaces = new_structure['interfaces']
+
+When we get the data back we see that we have a dictionary so we look at the keys
+type(interfaces)
+interfaces.keys()
+
+Here we get back a single key so I will peel back further by popping the key
+new_interfaces = interfaces['interfaces']
+
+Now we print out the data
+print(new_interfaces)
+
+What is returned now are interface names so we pick one to look at further
+new_interfaces['vlan1']
+
+We can also loop through the dictionary to look at the values
+for intf_name, intf_value in new_interfaces.items():
+    print(intf_name)
+    print(intf_value)
+    break <--- to stop on the first one
+
+You can also of course drill down deeper to get specific information parsed out
+for intf_name, intf_value in new_interfaces.items():
+    print(intf_name)
+    print(intf_value['interfaceStatus'])
+    break
+
+If there are multiple entries you can check each one by one to get an idea of what is returned
+structure_name[0]
+structure_name[1] ... etc
+
+You can also iterate through these values
+for data in structure_name:
+    print(data)
+    break  <--- to stop after the first iteration
+
+From here depending on what type data you get back you can print out whatever is desired. In our example we have dictionaries come back from inside the list so we print certain key/value pairs
+for data in structure_name:
+    print(data['mac'])
+    print(data['ip'])
+    break 
+
+
+* Changing data format structure
+
+First we will take a look at the data structure that we want to change.
+
+from pprint import pprint
+
+for k, v in lldp.items():
+    print(k)
+    pprint(v[0])
+    break
+
+Now we will create a new list called new_list and new dictionary called new_entry. We then add new key/value pairs to this new dictionary
+
+from pprint import pprint
+new_list = []
+
+for intf_name, lldp_data in lldp.items():
+    lldp_data = lldp_data[0]
+    new_entry = {
+        "intf_name": intf_name,
+        "remote_port": lldp_data['remote_port'],
+    }
+    new_list.append(new_entry)  <-- here we add the new dictionary to the list
+    break
+pprint(new_list)
+
+* Serialization protocols
+
+YAML and JSON are needed because our programs have data structures that may need to comunicate between computers who may or may not run the same OS. We may also need to write these to a file and read them later on the same computer. When doing this we need to convert the data structures into a stream of bytes by serialization. These standard protocols are needed to ensure other computers can understand this data. JSON is good for computer to computer communication when humans are not involved. It is also good for networking device API's when transfering data. It is not as good when human beings need to write it. YAML is easier for human beings to read and write. Ansible and Salt are examples of automation frameworks that use YAML.
+
+* YAML
+
+Writing a YAML list
+
+---
+ - router1 <-- here we have a 4 element list with strings of router hostnames
+ - router2
+ - router3
+ - router4
+
+Writing a YAML dictionary
+
+---
+key1: value1
+key2: value2
+key3: value3
+
+Creating a Nested dictionary
+
+---
+router1:                  <-- highest level key
+  device_type: cisco_ios  <-- nested dictionary is indented
+  ip_addr: 1.1.1.1
+  username: admin
+  password: changeme
+
+Different ways to represent strings, booleans
+
+---
+ - some_string
+ - "also a string"
+ - null
+# Booleans
+ - True
+ - False
+ - true
+ - false
+ - on
+ - off
+ - yes
+ - no
+ # Strings
+ - 'yes'
+ - |
+    This is a multiline
+    String in YAML
+ - >
+    You can also use this for multiline
+    doing so wont put a newline on each line  
+
+
+To open the YAML file in Python
+
+import yaml
+filename = input('Enter filename: ')
+with open(filename) as f:
+    yaml_out = yaml.load(f)
+print(yaml_out)
+
+To write a YAML file
+
+import yaml
+
+my_data = {
+	'device_name': 'rtr1'
+	'ip_addr': '10.1.1.1'
+	'username': 'admin'
+	'password' 'password'
+
+}
+
+filename = 'outputfile.yml'
+with open(filename, 'wt') as f:
+    yaml.dump(my_data, f, default_flow_style=False)
+
+* JSON
+
+Writing a python data type to JSON
+
+import json
+
+my_data = {
+	'device_name': 'rtr1'
+	'ip_addr': '10.1.1.1'
+	'username': 'admin'
+	'password' 'password'
+
+}
+
+filename = 'outputfile.json'
+with open(filename, 'wt') as f:
+    json.dump(my_data, f, indent=4)
+
+print(json.dumps(my_data)) <-- json.dumps prints the python data type out as a json string
+
+Importing a JSON file in Python
+
+import json
+from pprint import pprint
+
+filename = input('Input Filename: ')
+with open(filename) as f:
+    data = json.load(f)
+pprint(data)
+
+* CiscoConfParse
+
+Is a Python Library that is used to parse configuration of IOS. In Cisco IOS there is a hierarchy where you will see indentation with configuration that is related. Take for example interface config will have indented config under it belonging to the interface. You can find the information you are looking for by parsing with RegEx but CiscoConfParse can make this type of parsing easier. If you are working with a config that is a string data type you will need to convert it to a list so you will have to do a splitlines on the data.
+
+
+from ciscoconfparse import CiscoConfParse
+
+cisco_obj = CiscoConfParse('cisco1.txt')
+
+To see what you can do with this object
+
+dir(cisco_obj)
+
+To get more detailed information on the methods available for the object
+help(cisco_obj.find_objects)
+
+To find all the lines that begin with interface
+
+intf = cisco_obj.find_objects(r'^interface')
+
+This will return back a list of each interface to see a specific interface number
+intf[0]
+
+To get the first line of the interface config ie.. 'interface FastEthernet0'
+intf[0].text
+
+To see what all we can do with this object
+dir(intf[0])
+
+To provide the config of the specific interface "this includes information that you will not want when configuring the interface"
+intf[0].children
+
+To get just the configuration of the interface without the extra stuff you do not need
+for child in intf[0].children:
+    print(child.text)
+
+To find the interfaces that have an IP address on them and skip the others
+
+dir(cisco_obj)
+help(cisco_obj.find_objects_with_child) <-- to find out more about the method we will use
+
+This regex pattern will match IP address and no ip address. 
+cisco_obj.find_objects_w_child(parentspec=r'^interface', childspec=r'ip address')
+
+To resolve this we change the childspec regex to match beginning of the line and then whitespace
+match = cisco_obj.find_objects_w_child(parentspec=r'^interface', childspec=r'^\s+ip address')
+
+Now we can look at the interface that matched
+match[0]
+match[0].text
+match[0].children
+
+In this example we will match on finding con 0
+
+parent = cisco_obj.find_objects(r'^line con 0')
+
+To see if the config has children under it you can
+parent.is_parent
+
+parent.children <-- to see the children config will also include text outside of the config that we do not care about
+
+Here we will take a look deeper at a shild element
+a_child = children[1]
+
+To see the parent config
+a_child.parent
+
+To see other child configs under the same parent
+a_child.siblings
+
+Here we will look for all interfaces that do not have 'no ip address' configured
+cisco_obj.find_objects_wo_child(parentspec=r'^interface', childspec=r'no ip address')
+
+
+Here we look at a crypto map config
+
+match = cisco_obj.find_objects(r'^crypto map CRYPTO')
+match = match[0]
+
+To see all of the child config
+match.children
+
+You can also further look at all of the child config and do a search on only a specific line that you are interested in. In this example we look just for child config that matches 'set pfs '
+
+match.re_search_children(r'set pfs ')
+
+
