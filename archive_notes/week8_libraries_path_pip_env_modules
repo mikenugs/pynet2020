@@ -1,0 +1,133 @@
+* Libraries
+
+To check which version of python your system runs
+
+/usr/bin/python
+
+To import a library in this example regex library.A module is a single python file and a package is a directory of related python files that are related to each other. 
+
+import re
+
+To see where Python found the library
+re.__file__
+
+
+
+Python will first go out and find the file and will process it line by line from top to bottom and loads in what is in their. This can include imports from other programs. 
+
+When you import in this way all your names will be re.somthing
+help(re.search)
+
+Another way to import in python is to import like below. 
+from re import search, findall
+
+Python will load the re library from top to bottom. Now instead of having to do re.search you can just do search so your name space changes slightly.
+help(search)
+
+Python uses sys.path to search location information for its packages. To see the path you can
+import sys
+sys.path
+
+The mull string path is the current directory and all the other directories are self explanitory. .egg files are similar to tar files and they are python libraries. 
+
+To modify your sys.path in Linux
+In your ~/.bashrc file
+export PYTHONPATH=$PYTHONPATH=:/usr/local/django/pynet
+OR
+export PYTHONPATH=:/usr/local/django/pynet
+To confirm 
+env | grep PYTHONPATH
+
+* PIP
+
+PIP is the general way to install packages in Python. It will download not just the package but its dependencies as well. Pckages can be found from
+https://pypi.org/
+
+To install a package
+pip install netmiko
+To confirm it is installed
+import netmiko
+OR
+netmiko.__file__
+
+To see what version is installed
+
+netmiko.__version__
+
+To install a specific version of a package
+
+pip install netmiko==2.0.1
+
+You can upgrade a package by "this will upgrade the dependencies as well"
+
+pip install --upgrade netmiko
+
+To see all of the installed packages
+
+pip list
+
+To uninstall a pip package
+
+pip uninstall netmiko
+
+You can also use git to install a package from github
+
+pip install git+https://github.com/ktbyersBLAH/netmiko.git@develop
+
+To ensure that you install the correct package with the version of python that you use you can envoke pip this way
+
+python -m pip install netmiko
+
+* Python virtual environments
+
+Used to have a sandbox to install packages on. This will be a sandbox with a fresh install of python. It will have almost no pip packages installed so you can install whatever is needed. This way you do not mess up the system python when installing packages. 
+
+To create a virtualenvironment
+
+virtualenv3.6 -p /usr/bin/python36 test_venv
+
+To access it
+
+source test_env/bin/activate
+
+To exit it
+
+deactivate
+
+To see which sandboxes are available look at the directory where you have created the virtual environments and do a 
+ls
+
+* Creating a python module
+
+!devices.py
+rtr1 = {
+	'ip': '1.1.1.1',
+	'hostname': 'admin',
+	'password': 'pass123',
+}
+!devices.py
+
+Make sure your python file that you create is in your sys.path
+
+To import the module
+
+import devices
+
+To look at the options
+dir(devices)
+
+To access the dictionary we created
+
+devices.rtr1
+
+If the module is not in sys.path you can add it
+
+export PYTHONPATH=/home/gituser/SB/lesson8
+
+You can also import just the dictionary we created
+
+from devices import rtr1
+
+rtr1  <-- to see the dictionary
+
+
