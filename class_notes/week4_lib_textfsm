@@ -1,0 +1,260 @@
+* Libraries
+
+There are three ways to import a library
+
+1.) You can use import on the library
+import re
+When doing that you will need to prefix the name
+re.search
+help(re.search)
+
+2.) You can also do a from library import thing
+from re import search
+When doing this you can call directly to search
+search
+help(search)
+
+3.) You can also change the name of the thing you are importing 
+from re import search as my_search
+my_search
+
+You can use pip to install new libraries. To find out which new libraries are availble to you, you can use pypi.org. Look how many users are contributing to it and how widely used it is. How actrive the project is .. etc. 
+
+To install a package via PIP
+
+pip install netmiko
+
+To install a certain version of a package via PIP
+
+pip install netmiko==2.3.0
+
+To see what packages are installed
+pip list
+
+To get current state of your packages you can also do a 
+
+pip freeze
+
+You can take that output from the pip freeze and add it to a requirements.txt file
+
+Then you can install it on another machine using
+
+pip install -r ./requirements.txt
+
+To understand how python finds packages when you do an import
+
+import sys
+print(sys.path)
+
+The ' ' in the path will look in the local directory
+
+To see where a certain package resides
+
+import re
+re.__file__
+
+* Creating your own modules
+
+Your own module can be put anywhere where sys.path searches. You can make your own python module just name the file a .py such as myfile.py. If this had a variable in this example MY_CONST you can import it by
+
+import myfile
+my_file.MY_CONST
+
+You can also create a variable for username and password and import those
+
+from my_file import USERNAME, PASSWORD
+
+USERNAME
+'admin'
+
+To see the Python Path that you have set
+env | grep PYTHON
+PYTHONPATH=/home/mikenoc/python-libs:/home/mikenoc/DJANGOX/djproject/
+
+To add something to the Path
+export PYTHONPATH=/home/mikenoc/python-libs
+
+* Reusable functions
+
+You should leverege writing 
+
+The below if __name__ statement is typically used when you write code that will be used by other programs. The code above the if __name__ statement is typically used to import by other programs. 
+
+You should put importable code, functions, classes and variables here. This is where you put reusable code. 
+
+if __name__ == '__main__':
+
+You should put executable code here these are the things that accomplish what your program is intended to do. 
+
+Here is an example of importing data sets from one program to another. We write a program that includes this dictionary
+
+!my_devices.py
+
+rtr1 = {
+	'host': '1.1.1.1'
+}
+rtr2 = {
+	'host': '1.1.1.2'
+}
+
+APIKEY = 'FAKEKEY111'
+
+Now we import the dictionary router we created in another program
+
+!login.py
+
+from netmiko import ConnectHandler
+from my_devices import rtr3, rtr4, APIKEY
+
+net_conn = ConnectHandler(**rtr3)
+print(APIKEY)
+
+If you have a directory of python code then that is called a package
+
+* TextFSM
+
+The FSM stands for finate state machine. When working with networking devices and using SSH you grab string output from devices and you need to create structured data from this string output. When using RegEx they can get very complicated and maintain when you are dealing with allot of them. A disadvatage of using TextFSM is that you need to learn a new DSL, it is also hard to debug or get feedback on.
+
+You can run textfsm from the Linux command line against a file by
+
+python textfsm.py show_ip_int_br_template show_ip_int_br.txt
+
+The state maching will have a start state and then it will look for something and transition to another state when it finds the data it is looking for.
+
+Value INTERFACE (\S+)  <-- These values defined at the top are what TextFSM is looking to extract
+Value IP_ADDR (\S+)
+Value LINE_STATUS (up|down)
+Value LINE_PROTOCOL (up|down)
+
+Start                              <--- This is the start of the FSM
+  ^Interface.*Protocol\s*$$ -> ShowIPIntBrief  <---- The <- is how we transation between the state machines
+
+ShowIPIntBrief                     <--- Here we have the pattern that we are matching upon
+  ^${INTERFACE}\s+${IP_ADDR}.*${LINE_STATUS}\s+${LINE_PROTOCOL}\s*$$ -> Record
+
+EOF                            <--- There is an implicit EOF but you can also specify one at the bottom of the code.
+
+* Creating a TextFSM template
+
+We start off our TextFSM templatees by creating the values we want to match on. You do this by specifying the keyword Value and then you create a variable name for it. After that you add Regex that will match the value you are looking for.
+
+Value INTERFACE (\S+)
+
+When specifying your match condition to extract data you suround your variable name with ${}. 
+
+Start
+  ^${INTERFACE}\s+ -> Record
+
+EOF
+
+The above template will just match the first row of interfaces and no other data such as IP address, status .. etc.
+
+Value INTERFACE (\S+)
+Value IP_ADDR (\S+)
+Value LINE_STATUS (up|down)
+Value LINE_PROTOCOL (up|down)
+
+Start
+  ^Interface.*Protocol\s*$$ -> ShowIPIntBrief  <--- This matches the first row of show ip int brief so we extractit out of the match. The \s+ at the end or protocol is because we are not sure if there is whitespace at the end of the line. We then transition to the next state which is ShowIPIntBrief where we match what we are looking for.
+
+The $$ is used because the $ is a special character with TextFSM
+
+ShowIPIntBrief
+  ^${INTERFACE}\s+${IP_ADDR}.*${LINE_STATUS}\s+${LINE_PROTOCOL}\s*$$ -> Record
+
+EOF
+
+#Interface                  IP-Address      OK? Method Status                Protocol
+#FastEthernet0              unassigned      YES unset  down                  down    
+#FastEthernet1              unassigned      YES unset  down                  down    
+#FastEthernet2              unassigned      YES unset  down                  down    
+#FastEthernet3              unassigned      YES unset  down                  down    
+#FastEthernet4              10.220.88.20    YES NVRAM  up                    up      
+#Vlan1                      unassigned      YES unset  down                  down  
+
+* Multiline TextFSM example
+
+Value MODEL (\S+)
+Value MEMORY (\d+K)
+Value SERIAL_NUMBER (\S+)
+Value CONFIG_REGISTER (0x\d+)
+
+Start
+  ^cisco ${MODEL}\s+.*processor with ${MEMORY}/\d+K bytes of memory
+  ^Processor board ID ${SERIAL_NUMBER}
+  ^Configuration register is ${CONFIG_REGISTER} -> Record
+    
+EOF
+
+#cisco C1111-4P (1RU) processor with 1456982K/6147K bytes of memory.
+#Processor board ID FGL222290LB
+#1 Virtual Ethernet interface
+#6 Gigabit Ethernet interfaces
+#32768K bytes of non-volatile configuration memory.
+#4194304K bytes of physical memory.
+#2863103K bytes of flash memory at bootflash:.
+#0K bytes of WebUI ODM Files at webui:.
+#
+#Configuration register is 0x2102
+#
+
+* Complex TextFSM example where data is inconsistent across lines
+
+In this example we are trying to capture the Networks of a show ip bgp. But the networks do not show up on each line as you can see in this example. 
+
+Value VALID_BEST ([*>]+)  <-- The *> means it is the best route and those are the routes we are looking for. Since the * is a regex value we have to enclose it in []
+Value Filldown PREFIX (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2})   <--- The filldown is used for all of the blank lines to the left of the next hop. It will copy the first PREFIX down and fill it in for all of the other lines.
+Value NEXT_HOP (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})
+
+Start
+  ^\s+Network.*Path\s*$$ -> ShowIPBgp <-- Here we strip out all the uninstristing data that we dont carte about by having TextFSM match on the line before the interesting data. It then go to the next state ShowIPBgp
+
+We have two records one will match when we have a NETWORK statement to the left of next hop and the other will match when we do not.
+ShowIPBgp
+  ^ ${VALID_BEST}\s+${PREFIX}\s+${NEXT_HOP} -> Record
+  ^ ${VALID_BEST}\s+${NEXT_HOP} -> Record
+
+
+EOF
+
+
+#BGP table version is 17889841, local router ID is 128.223.51.103
+#Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+#              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+#              x best-external, a additional-path, c RIB-compressed, 
+#Origin codes: i - IGP, e - EGP, ? - incomplete
+#RPKI validation codes: V valid, I invalid, N Not found
+#
+#     Network          Next Hop            Metric LocPrf Weight Path
+# *   1.0.0.0/24       208.74.64.40                           0 19214 174 13335 i
+# *                    162.251.163.2                          0 53767 13335 i
+# *                    94.142.247.3             0             0 8283 13335 i
+# *                    212.66.96.126                          0 20912 13335 i
+# *                    91.218.184.60                          0 49788 13335 i
+# *                    137.39.3.55                            0 701 3257 13335 i
+# *                    132.198.255.253                        0 1351 10578 13335 i
+# *                    162.250.137.254                        0 4901 6079 13335 i
+# *                    208.51.134.254           0             0 3549 3356 1299 13335 i
+# *>                   202.232.0.2                            0 2497 13335 i
+
+* Including TextFSM within Python
+
+from pprint import pprint
+import textfsm
+
+template_file = "show_ip_int_brief.template"
+template = open(template_file)
+
+with open("show_ip_int_brief.txt") as f:
+    raw_text_data = f.read()
+
+# The argument 'template' is a file handle and 'raw_text_data' is a string.
+re_table = textfsm.TextFSM(template)
+data = re_table.ParseText(raw_text_data)
+template.close()
+
+print("\nPrint the header row which could be used for dictionary construction")
+print(re_table.header)
+print("\nOutput Data: ")
+pprint(data)
+print()
