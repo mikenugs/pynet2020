@@ -1,0 +1,465 @@
+* Jinja2 templating
+
+Jinja2 is the main way to template in Python. In programming you have some source of variables they can be yaml files or any other files. And you have a template that wants to place the variables on them and create new files "generated files" based on the combination of the template and variables. Always move the complexity out of your Jinja2 template and onto your python program. 
+
+* Jinja2 constructs
+
+•	Jinja2 Flow Control
+Variables: {{ vlan1 }}
+
+Conditionals: 
+{% if var == 'value' %} 
+string of output text 
+{% elif var == 'other value' %} 
+next string of output text 
+{% else %} 
+the else clause 
+{% endif %}
+
+For Loops: 
+{% for item in some_list %}
+ string of output {{ item }}
+ {% endfor %}
+
+•	Jinja2 Data Structures
+List: {{ some_list[0] }}
+Loop over it using a for-loop
+Dictionary: {{ a_dict["key"] }}
+  Or {{ a_dict.key }}
+ 
+Loop over a dictionary
+{% for key in my_dict %} 
+{{ key }} 
+{% endfor %}
+{% for k, v in my_dict.items() %} 
+Some text {{ k }} and {{ v }}
+ {% endfor %}
+
+•	Jinja2 Filters
+
+List: {{ some_list[0] }}
+Loop over it using a for-loop
+Dictionary: {{ a_dict["key"] }}
+  Or {{ a_dict.key }}
+ 
+Loop over a dictionary
+{% for key in my_dict %} 
+{{ key }} 
+{% endfor %}
+{% for k, v in my_dict.items() %} 
+Some text {{ k }} and {{ v }} 
+{% endfor %}
+
+* Using Jinja2 to render a simple string and pass variables directly to template
+
+from jinja2 import Template
+
+bgp_config = """
+router bgp {{ bgp_as }}
+ bgp router-id {{ router_id }}
+ bgp log-neighbor-changes
+ neighbor {{ peer1 }} remote-as 44
+"""
+
+j2_template = Template(bgp_config)
+output = j2_template.render(bgp_as=22, router_id="1.1.1.1", peer1="10.20.30.1")
+print(output)
+
+* Using Jina2 to render a string and passing the variables to the template via a dictionary
+
+from jinja2 import Template
+
+bgp_config = """
+router bgp {{ bgp_as }}
+ bgp router-id {{ router_id }}
+ bgp log-neighbor-changes
+ neighbor {{ peer1 }} remote-as 44
+"""
+
+my_vars = {"bgp_as": 22, "router_id": "1.1.1.1", "peer1": "10.20.30.1"}
+
+j2_template = Template(bgp_config)
+output = j2_template.render(**my_vars)
+print(output)
+
+* Jinja2 importing your template from a file. If a variable is missing this will still work it just will have a blank space where the variable should have been. 
+
+from jinja2 import Template
+
+filename = "bgp_config.j2"
+with open(filename) as f:
+    my_template = f.read()
+
+template_vars = {"bgp_as": 22, "router_id": "1.1.1.1", "peer1": "10.20.30.1"}
+
+j2_template = Template(my_template)
+output = j2_template.render(**template_vars)
+print(output)
+
+!bgp_config.j2
+
+router bgp {{ bgp_as }}
+ bgp router-id {{ router_id }}
+ bgp log-neighbor-changes
+ neighbor {{ peer1 }} remote-as 44
+
+ !
+
+* Jinja2 setting up an environment. This can help when needing to specify another directory for template files. We can also specify undefined=StrictUndefined if we want it to fail when there is an undefined variable. When you use FileSystemLoader to specify template location you can use a list to specify multiple locations if you like similar to how I have specified this below. 
+
+from __future__ import unicode_literals, print_function
+from jinja2 import FileSystemLoader, StrictUndefined
+from jinja2.environment import Environment
+
+# env = Environment()
+# env.loader = FileSystemLoader('.')
+env = Environment(undefined=StrictUndefined)
+env.loader = FileSystemLoader([".", "./templates/"])
+
+my_vars = {"bgp_as": 22, "router_id": "1.1.1.1", "peer1": "10.20.30.1"}
+
+template_file = "bgp_config.j2"
+template = env.get_template(template_file)
+output = template.render(**my_vars)
+print(output)
+
+* Jinja2 conditionals within your template
+
+from __future__ import unicode_literals, print_function
+from jinja2 import FileSystemLoader, StrictUndefined
+from jinja2.environment import Environment
+
+env = Environment(undefined=StrictUndefined)
+env.loader = FileSystemLoader(".")
+
+my_vars = {"primary_ip": True}
+
+template_file = "intf_config1.j2"
+template = env.get_template(template_file)
+output = template.render(**my_vars)
+print(output)
+
+!intf_config1.j2
+interface GigabitEthernet0/0/0
+ {%- if primary_ip %}
+ ip address 10.220.88.22 255.255.255.0
+ {%- endif %}
+ negotiation auto
+ !
+
+ * Jinja2 whitespace with conditionals
+
+ WHen using jinja2 you will get whitespace with your conditionals on the lines with the if statements for example. To strip that you can use {%-} instead of {%} like we have below. This strips the \n and the whitespace. 
+
+ {%- if primary_ip %}
+ ip address 10.220.88.22 255.255.255.0
+ {%- endif %}
+
+ * Jinja2 more conditional examples
+
+ from __future__ import unicode_literals, print_function
+from jinja2 import FileSystemLoader, StrictUndefined
+from jinja2.environment import Environment
+
+env = Environment(undefined=StrictUndefined)
+env.loader = FileSystemLoader(".")
+
+my_vars = {"mode": "access"}
+
+template_file = "intf_config2.j2"
+template = env.get_template(template_file)
+output = template.render(**my_vars)
+print(output)
+
+!intf_config2.j2
+interface GigabitEthernet0/1/0
+ {%- if mode == "access" %}
+ switchport access vlan 400
+ switchport mode access
+ {%- elif mode == "trunk" %}
+ switchport trunk native vlan 1
+ switchport trunk allowed vlan 1,300,400
+ switchport mode trunk
+ {%- endif %}
+ !
+
+ * Jinja2 Nested conditionals
+
+ Here we have a nested conditional in our template where if the first condition is matched we hadd the neighbor statement. And if the second conditional is matched we then add the policy configuration. 
+
+from __future__ import unicode_literals, print_function
+from jinja2 import FileSystemLoader, StrictUndefined
+from jinja2.environment import Environment
+
+env = Environment(undefined=StrictUndefined)
+env.loader = FileSystemLoader(".")
+
+bgp_vars = {
+    "bgp_peer1": True,
+    "peer_ip": "1.1.1.1",
+    #    "bgp_policy": True,
+}
+
+template_file = "bgp_config2.j2"
+template = env.get_template(template_file)
+output = template.render(**bgp_vars)
+print(output)
+
+ !bgp_config2.j2
+ {%- if bgp_peer1 is defined %}
+ neighbor {{ peer_ip }}
+  address-family ipv4 unicast
+   {%- if bgp_policy is defined %}
+   route-policy ALLOW in
+   route-policy ALLOW out
+   {%- endif %}
+ {%- endif %}
+ !
+
+ * Jinja2 using loops in your templates. The below code will print out 25 different unique port configs because it is using the range command with the for statement in the template. 
+
+from __future__ import unicode_literals, print_function
+from jinja2 import FileSystemLoader, StrictUndefined
+from jinja2.environment import Environment
+
+env = Environment(undefined=StrictUndefined)
+env.loader = FileSystemLoader(".")
+
+bgp_vars = {
+    "bgp_peer1": True,
+    "peer_ip": "1.1.1.1",
+    #    "bgp_policy": True,
+}
+
+template_file = "bgp_config2.j2"
+template = env.get_template(template_file)
+output = template.render(**bgp_vars)
+print(output)
+
+!intf_config1.j2
+{%- for port_number in range(1, 25) %}
+interface GigabitEthernet0/1/{{ port_number }}
+ switchport access vlan 400
+ switchport mode access
+!
+{%- endfor %}
+!
+
+* Here is anexample of looping through a template with the logic moved to the program as apposed to the template
+
+from __future__ import unicode_literals, print_function
+from jinja2 import FileSystemLoader, StrictUndefined
+from jinja2.environment import Environment
+
+env = Environment(undefined=StrictUndefined)
+env.loader = FileSystemLoader(".")
+
+base_intf = "GigabitEthernet0/1/"
+intf_list = []
+for intf_number in range(24):
+    intf_name = f"{base_intf}{intf_number}"
+    intf_list.append(intf_name)
+
+intf_vars = {"intf_list": intf_list}
+
+template_file = "intf_config2.j2"
+template = env.get_template(template_file)
+output = template.render(**intf_vars)
+print(output)
+
+!intf_config2.j2
+{%- for intf in intf_list %}
+interface {{ intf }}
+ switchport access vlan 400
+ switchport mode access
+!
+{%- endfor %}
+!
+
+* Jinja2 nesting for loops
+
+####### Single for loop
+{%- for port_number in range(1, 25) %}
+interface GigabitEthernet0/1/{{ port_number }}
+!
+{%- endfor %}
+
+
+####### Nested for loops
+{%- for slot in range(1, 4) %}
+  {%- for port_number in range(1, 25) %}
+interface GigabitEthernet0/{{ slot }}/{{ port_number }}
+  {%- endfor %}
+{%- endfor %}
+
+####### For loop with conditional
+{%- for port_number in range(1, 25) %}
+  {%- if port_number == 10 %}
+interface GigabitEthernet0/1/{{ port_number }}
+  {%- endif %}
+{%- endfor %}
+
+######## Jinja2 comment
+{# This is a comment in Jinja2 #}
+
+* Jinja2 list practicle examples
+
+from __future__ import unicode_literals, print_function
+from jinja2 import FileSystemLoader, StrictUndefined
+from jinja2.environment import Environment
+
+env = Environment(undefined=StrictUndefined)
+env.loader = FileSystemLoader(".")
+
+base_intf = "GigabitEthernet0/1/"
+intf_list = []
+for intf_number in range(24):
+    intf_name = f"{base_intf}{intf_number}"
+    intf_list.append(intf_name)
+
+intf_vars = {"intf_list": intf_list}
+
+template_file = "template1.j2"
+template = env.get_template(template_file)
+output = template.render(**intf_vars)
+print(output)
+
+!template1.j2
+
+Some text
+Hello World
+
+First element:
+{{ intf_list[0] }}
+
+Last element:
+{{ intf_list[-1] }}
+
+Length of list:
+{{ intf_list | length }}
+
+Entire list:
+{{ intf_list }}
+!
+
+* Jinja2 dictionary practicle examples
+
+from __future__ import unicode_literals, print_function
+from jinja2 import FileSystemLoader, StrictUndefined
+from jinja2.environment import Environment
+
+env = Environment(undefined=StrictUndefined)
+env.loader = FileSystemLoader(".")
+
+arp_entry = {
+    "interface": "mgmt0",
+    "ip": "10.0.0.72",
+    "mac": "2C:C2:60:36:32:21",
+    "age": 140.0,
+}
+
+template_vars = {"arp_entry": arp_entry}
+
+template_file = "template1.j2"
+template = env.get_template(template_file)
+output = template.render(**template_vars)
+print(output)
+
+!template1.j2
+Some text
+Hello World
+
+ARP Interface:
+{{ arp_entry["interface"] }}
+
+MAC --> IP
+{{ arp_entry['mac'] }} --> {{ arp_entry["ip"] }}
+
+For loop in dict
+{%- for k in arp_entry %}
+    {{ k }}
+{%- endfor %}
+
+For loop in dict (using items)
+{%- for k, v in arp_entry.items() %}
+    {{ k }} --> {{ v }}
+{%- endfor %}
+!
+
+* Jinja2 creating variables and filters
+
+{%- set var1 = 'Cisco' %}
+{%- set var2 = 'Arista' %}
+{%- set var3 = 'Juniper' %}
+
+{{ var1 }}
+{{ var2 }}
+{{ var3 }}
+
+{%- set my_list = ['cisco', 'arista', 'juniper'] %}
+
+# String operations to capatilize, lower center etc ... You can chain these one after the other with the pipe between. 
+
+{{ var1 | capitalize | upper | lower }}
+
+{{ var2 | capitalize | center(80) }}
+
+{{ var4 | default("Some Default Value") }}
+
+{#
+
+{{ my_list }}
+#}
+
+* Jinja2 includes. This can be used to includes templates within other jinja2 templates
+
+from __future__ import unicode_literals, print_function
+from jinja2 import FileSystemLoader, StrictUndefined
+from jinja2.environment import Environment
+
+env = Environment(undefined=StrictUndefined)
+env.loader = FileSystemLoader(".")
+
+template_vars = {}
+
+template_file = "template1.j2"
+template = env.get_template(template_file)
+output = template.render(**template_vars)
+print(output)
+
+!template1.j2
+
+header info
+
+{% include 'other_template.j2' %}
+
+footer info
+
+!other_template.j2
+
+INFO FROM OTHER TEMPLATE
+
+!Here we have an example where we set a variable for the name of the template we want to import
+
+from __future__ import unicode_literals, print_function
+from jinja2 import FileSystemLoader, StrictUndefined
+from jinja2.environment import Environment
+
+env = Environment(undefined=StrictUndefined)
+env.loader = FileSystemLoader(".")
+
+template_vars = {"template_var": "second_template.j2"}
+
+template_file = "template2.j2"
+template = env.get_template(template_file)
+output = template.render(**template_vars)
+print(output)
+
+!template2.j2
+
+header info
+
+{#- Have other template be dynamically #}
+{% include template_var %}
+
+footer info
