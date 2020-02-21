@@ -1,0 +1,263 @@
+* Screen scrapping vs API's
+
+Telnet and SSH are screen scrapping methods that where used for human intervention. An API is meant for programmatic intervention. With screen scrapping there is no known way for it to be done. In other words the command may ask you to confirm something or other input which makes screen scrapping difficult. Also you typically get a string back with screen scrapping which makes it tough to parse through it. You need to use RegEx or TextFSM to make data sets out of it. With API's you will get structured data back. Also when screen scrapping commands can change with different OS versions which may render your screen scrapping code invalid between versions. With API's it is much better to know when the command is done and you get structured data back. 
+
+* eAPI
+
+Arista uses eAPI which uses HTTPS the outer layer uses TLS transport for security. Inside that we run HTTP commands like POST and pass JSON payload to the device. Restful API's characterisics include URL's that change when accessing different resources. You would also use HTTP GET and POST when accessing and getting things. The Arista eAPI is different and not restful because it only uses one URL and only HTTP POST. 
+
+* Enable eAPI on Arista device
+
+management api http-commands
+  protocol https
+  no shutdown
+
+show management api http-commands <- to confirm
+
+* eAPI using Python Requests Library for show commands
+The requests library is Pythons most common way for interacting with HTTP requests. 
+
+iimport requests
+import json
+from pprint import pprint
+from getpass import getpass
+
+from urllib3.exceptions import InsecureRequestWarning
+import ipdb  # noqa
+
+requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning) <-- disables certificate warnings
+
+
+if __name__ == "__main__":
+
+    # ipdb.set_trace()
+
+    http_headers = {"Content-Type": "application/json-rpc;"}
+    host = "arista8.lasthop.io"
+    port = 443
+    username = "pyclass"
+    password = getpass()
+
+    url = "https://{}:{}/command-api".format(host, port)
+
+    json_payload = {
+        "jsonrpc": "2.0",
+        "method": "runCmds",
+        "params": {"version": 1, "cmds": ["show version"], "format": "json"},
+        "id": "1",
+    }
+    json_data = json.dumps(json_payload)
+    http_headers["Content-length"] = str(len(json_data))
+
+    response = requests.post(
+        url,
+        headers=http_headers,
+        auth=(username, password),
+        data=json_data,
+        verify=False,
+    )
+    response = response.json()
+
+    print()
+    pprint(response)
+    print()
+
+    * eAPI using Python Requests Library for configurations
+
+import requests
+import json
+from pprint import pprint
+from getpass import getpass
+
+from urllib3.exceptions import InsecureRequestWarning
+import ipdb  # noqa
+
+requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
+
+
+if __name__ == "__main__":
+
+    # ipdb.set_trace()
+    http_headers = {"Content-Type": "application/json-rpc;"}
+    host = "arista8.lasthop.io"
+    port = 443
+    username = "pyclass"
+    password = getpass()
+
+    url = "https://{}:{}/command-api".format(host, port)
+
+    cmds = [
+        "disable",
+        {"cmd": "enable", "input": ""},
+        "configure terminal",
+        "vlan 225",
+        "name green",
+    ]
+
+    json_payload = {
+        "jsonrpc": "2.0",
+        "method": "runCmds",
+        "params": {"version": 1, "cmds": cmds, "format": "json"},
+        "id": "1",
+    }
+    json_data = json.dumps(json_payload)
+    http_headers["Content-length"] = str(len(json_data))
+
+    response = requests.post(
+        url,
+        headers=http_headers,
+        auth=(username, password),
+        data=json_data,
+        verify=False,
+    )
+    response = response.json()
+
+    print()
+    pprint(response)
+    print()
+
+* Using PyEAPI instead of the requests library to create a connection
+In general whenever there is an API you want to find if there is a library to assist you with the low level machanics of interfacing to the library.
+
+
+import pyeapi
+from getpass import getpass
+import ipdb
+
+
+ipdb.set_trace()
+connection = pyeapi.client.connect(
+    transport="https",
+    host="arista8.lasthop.io",
+    username="pyclass",
+    password=getpass(),
+    port="443",
+)
+
+# enable = getpass("Enable: ")
+# device = pyeapi.client.Node(connection, enablepwd=enable)
+device = pyeapi.client.Node(connection)
+
+!To see what commands are available via the device object you can
+
+dir(device)
+
+help(device.get_config)
+
+* Using PyEAPI and .eapi.conf
+eapi.conf can be used to specify additional connection information. Below we will add the device we are attempting to connect to in the eapi.conf file. 
+
+nano ~/.eapi.conf
+
+[connection:arista7]
+host: arista7.lasthop.io
+
+[connection:arista8]
+host: arista8.lasthop.io
+
+[DEFAULT]  <-- optionally you can put attributes here as well. 
+username: pyclass
+password: !!!PASSWORD_NEEDS_SET!!!
+transport: https
+
+!pyeapi_w_conf.py
+
+import pyeapi
+
+device1 = pyeapi.connect_to("arista8")
+device2 = pyeapi.connect_to("arista7")
+print(device1)
+
+* Using PyEAPI for show commands
+
+import pyeapi
+from getpass import getpass
+
+connection = pyeapi.client.connect(
+    transport="https",
+    host="arista8.lasthop.io",
+    username="pyclass",
+    password=getpass(),
+    port="443",
+)
+
+# enable = getpass("Enable: ")
+# device = pyeapi.client.Node(connection, enablepwd=enable)
+device = pyeapi.client.Node(connection)
+output = device.enable(["show version", "show ip arp"]) <-- the enable command runs show commands and ensures you are in the enable prompt
+print(output)
+
+* Using PyEAPI to configure devices
+
+import pyeapi
+from getpass import getpass
+
+connection = pyeapi.client.connect(
+    transport="https",
+    host="arista8.lasthop.io",
+    username="pyclass",
+    password=getpass(),
+    port="443",
+)
+
+cfg = [
+    "vlan 225",
+    "name green",
+    "vlan 226",
+    "name red"
+]
+device = pyeapi.client.Node(connection)
+output = device.config(cfg)
+print(output)
+
+You can also use device.run_commands to perform either config or show commands. This is what Napalm uses. 
+
+* You can also use an .api() subsystem as well. You can find a list of these subsystems at the below link. 
+
+https://pyeapi.readthedocs.io/en/latest/modules.html
+
+import pyeapi
+from getpass import getpass
+
+connection = pyeapi.client.connect(
+    transport="https",
+    host="arista8.lasthop.io",
+    username="pyclass",
+    password=getpass(),
+    port="443",
+)
+
+enable = getpass("Enable: ")
+device = pyeapi.client.Node(connection, enablepwd=enable)
+
+vlan_cfg = device.api("vlans")  <-- here we call the API subsystem for Vlans
+print(vlan_cfg)
+
+"""
+>>> vlan_cfg
+<pyeapi.api.vlans.Vlans object at 0x7f3f39eaac88>
+>>> vlan_cfg.getall()
+{'1': {'vlan_id': '1', 'name': 'default', 'state': 'active', 'trunk_groups': []}}
+>>> vlan_cfg.get(1)
+{'vlan_id': 1, 'name': 'default', 'state': 'active', 'trunk_groups': []}
+>>> help(vlan_cfg.create)
+>>> vlan_cfg.create(225)
+True
+>>> vlan_cfg.create(226)
+True
+>>> vlan_cfg.create(226)
+True
+>>> vlan_cfg.create(227)
+True
+>>> vlan_cfg.set_name(225, "blue")
+True
+>>> vlan_cfg.set_name(226, "red")
+True
+>>> vlan_cfg.set_name(227, "orange")
+True
+>>> vlan_cfg.getall()
+{'1': {'vlan_id': '1', 'name': 'default', 'state': 'active', 'trunk_groups': []}, '225':
+{'vlan_id': '225', 'name': 'blue', 'state': 'active', 'trunk_groups': []}, '226':
+{'vlan_id': '226', 'name': 'red', 'state': 'active', 'trunk_groups': []}, '227':
+{'vlan_id': '227', 'name': 'orange', 'state': 'active', 'trunk_groups': []}}
+"""
