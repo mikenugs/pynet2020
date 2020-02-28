@@ -1,0 +1,346 @@
+* Why use XML?
+
+Not all vendors support JSON yet. NetConf also uses XML under the hood for how data is serialized. NX-API is capable of using XML as well. IOS-XR has an XML susbsystem as well. There are still allot of field devices that support XML. It is currently the more widely availble in use to support your field devices. There are three libraries that we need to be aware of to support XML in Python
+
+xmltodict <- converts to JSON
+lxml
+elementtree
+
+
+There is a hierarchy to this structure. There is RPC reply tags and inside that there is a software information tag, and inside that there is host-name... etc in the structure. This is modeled in a tree structure. The root of the below tree is rpc-reply and the child would be software-information. A parent is one level up from a child. These tags are also called element nodes. The text fields like srx100h2 are contained within the tags. They are the data within the tags. The tags are associated with the element-node and it is an attribute of it. 
+
+<rpc-reply xmlns:junos="http://xml.juniper.net/junos/12.1X44/junos">
+    <software-information>
+        <host-name>pynet-jnpr-srx1</host-name>
+        <product-model>srx100h2</product-model>
+        <product-name>srx100h2</product-name>
+        <jsr/>
+        <package-information>
+            <name>junos</name>
+            <comment>JUNOS Software Release [12.1X44-D35.5]</comment>
+        </package-information>
+    </software-information>
+    <cli>
+        <banner></banner>
+    </cli>
+</rpc-reply>
+
+A node is a entitiy in the tree it can be a tag such a root node or child node. There are interconnections between these nodes in a hierarchy. An element is a tag < and everything that is contained until the closing </>
+
+Sibling nodes are on the same level of the hierarchy such as product-model and product-name above. They are decendents of rpc-reply. Ancestor nodes are upstream and rpc-reply would be an ancestor of product-name. 
+
+* xmltodict Library
+
+This is a library that can convert XML to a Python dictionary. It converts XML to JSON. The issue with this can come into play because we have tags, text fields.. etc so it is hard to map that to Python data types. 
+
+If you had two elements with the same tag name you will get back a list for those two elements. This can be problomatic when drilling down elements. 
+
+<product-name>srx100h2</product-name>
+<product-name>srx100h3</product-name>
+
+* Using xmltodict to take an XML document and create a orderedDict
+
+import xmltodict
+
+f = open('show_version3.xml')
+xmldata = f.read().strip()
+
+my_xml = xmltodict.parse(xmldata)
+
+* To peep back data from xmltodict
+
+Look at the keys
+my_xml.keys()
+
+my_xml['key_name']
+
+* Using lxml Library to open a XML document
+
+
+from lxml import etree
+
+my_xml = etree.parse('juniper_sh_ver.xml')
+
+* The object you get back is an elementtree object
+
+my_xml = my_xml.getroot()
+
+my_xml.tag  <-- to get the tag
+
+* using lxml to write a string to an XML file
+
+etree.tostring(my_xml)
+
+* Printing out the string to XML format
+
+print(etree.tostring(my_xml).decode())
+
+* Another lxml example
+
+import xml.etree.ElementTree as etree
+
+my_xml = etree.parse('juniper_sh_ver.xml')
+
+my_xml.tag  <-- to see the tag
+
+* Parsing info using LXML and traversing the XML tree
+
+from lxml import etree
+
+my_xml = etree.fromstring(xml_variable)
+
+my_xml.tag 
+
+etree.tostring(my_xml) <-- creates a byte string
+
+etree.tostring(my_xml).decode() <-- creates a unicode string
+
+print(etree.tostring(my_xml).decode()) <-- to print out the XML in a visually pleasing manner
+
+my_xml.getchildren()  <-- to show the children
+
+my_xml[0]
+my_xml[1]
+
+my_xml.getchildren()[0]
+my_xml.getchildren()[0].getchildren()
+
+for child in my_xml:
+    print(child)
+
+for child in my_xml:
+    print(child.tag)
+
+dir(my_xml) <-- to find options for working with this object
+
+for child in my_xml.iterdescendants():
+    print(child)
+
+* lxml and findtree
+
+from lxml import etree
+
+etree.fromstring(a)
+
+my_xml = etree.fromstring(a)
+
+If you want to see the lxml
+
+print(etree.tostring(my_xml).decode())
+
+To find the product-name tag within your tree
+
+my_xml.find('product-name')
+
+my_xml.find('./product-name') <-- will search relative to the root node
+
+my_xml.find('./product-name/software-information')  <-- will look further down the tree
+
+my_xml.findall('./product-name/software-information')  <-- will reply back with a list of all the occurances of these tags.
+
+my_xml.findall('.//product-name') <-- you can specify this so you do not need the full path when searching for product name. Can be done with find or findall
+
+my_xml.find('.//product-name').text <-- to extract the text 
+my_xml.findall('.//product-name').text <-- to extract the text
+
+* XML namespaces
+
+XML namespaces make things more dificult when programming with Python. XML namespaces are needed to help prevent overlapping tags. With namespaces you can keep the same tag name for elements where you can use interface for show interface name space and interface for a show lldp neigbor. The URL is used to differentiate the name space. 
+
+<rpc-reply xmlns:junos="http://xml.juniper.net/junos/12.1X44/junos"> <-- this is the XML namespace for this XML
+    <software-information>
+        <host-name>pynet-jnpr-srx1</host-name>
+        <product-model>srx100h2</product-model>
+        <product-name>srx100h2</product-name>
+        <jsr/>
+        <package-information>
+            <name>junos</name>
+            <comment>JUNOS Software Release [12.1X44-D35.5]</comment>
+        </package-information>
+    </software-information>
+    <cli>
+        <banner></banner>
+    </cli>
+</rpc-reply>
+
+* Handling XML namespaces with lxml
+
+LXML wants you to have the name spaces in your search. 
+
+!nxos_ns.xml
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<nf:rpc-reply xmlns:nf="urn:ietf:params:xml:ns:netconf:base:1.0" xmlns="http://www.cisco.com/nxos:1.0:sysmgrcli">
+ <nf:data>
+  <show>
+   <version>
+      <sys_ver_str>7.3(1)D1(1) [build 7.3(1)D1(0.10)]</sys_ver_str>
+   </version>
+  </show>
+ </nf:data>
+</nf:rpc-reply>
+
+from lxml import etree
+
+x = etree.parse('nxos_ns.xml')
+
+my_xml = x.getroot()
+
+my_xml
+my_xml.tag <-- you will see the name space with the tag
+my_xml[0]
+my_xml[0].tag <-- you will see the name space in these results
+
+One way to pull up text when we now have to put the name space in is
+
+my_xml.find('{urn:ietf:params:xml:ns:netconf:base:1.0}data')
+
+The above method is cumbersome when dealing with long name space URN's
+
+You can alternatively try a wild card to match all name spaces {*}
+
+my_xml.find('{*}data')
+
+my_xml.find('.//{*}version') <-- easiest way to search
+
+You can also try using a name space map
+
+ns_map = {}
+
+ns_map['ns'] = 'urn:ietf:params:xml:ns:netconf:base:1.0'
+ns_map[None] = 'http://www.cisco.com/nxos:1.0:sysmgrcli'
+
+my_xml.find('nf:data', namespaces=ns_map)
+my_xml.find('nf:data/show', namespaces=ns_map)
+my_xml.find('.//sys_ver_str', namespaces=ns_map).text
+
+* NXAPI
+
+Uses HTTPS for transport. We pass XML or JSON RPC data within HTTPS. The two common Python libraries for NX-API are nxapi-plumbing and pynxos. You can put the hostname or IP of an NXOS device and connect to it on a a browser on port 8443.
+
+To configure NXAPI on a Nexus router
+
+feature nxapi
+nxapi https port 8443
+nxapi sandbox
+
+You can use json, xml or json-rpc and xml or json-rpc are suggested. XML seems to have the least amount of issues.
+
+You will want to use a library to extract the low level plumbing of the interaction between you and the device and that can be done with nxapi-plumbing or pynxos
+
+* Using nxapi plumbing and json-rpc
+
+import requests
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+from getpass import getpass
+from nxapi_plumbing import Device
+
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
+device = Device(
+    api_format="jsonrpc",
+    host="nxos1.lasthop.io",
+    username="pyclass",
+    password=getpass(),
+    transport="https",
+    port=8443,
+    verify=False,
+)
+
+output = device.show("show hostname")
+print(output)
+
+You can also run a list of commands as well
+
+cmds = ["show hostname", "show version", "show lldp neighbors"]
+output = device.show_list(cmds)
+print(output)
+
+Going through your structured data that is returned when you ran the list command.
+
+type(output)
+len(output)
+output[0]
+output[1]
+... etc
+
+output[0].keys()
+output[0]['command']
+
+You can also configure a device using the following
+
+cfg_cmd = ["logging monitor 2"]
+output = device.config_list(cfg_cmd)
+print(output)
+
+output = device.save()
+print(output)
+
+* NXAPI and XML
+
+import requests
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+from lxml import etree
+from nxapi_plumbing import Device
+from getpass import getpass
+
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
+device = Device(
+    api_format="xml",
+    host="nxos1.lasthop.io",
+    username="pyclass",
+    password=getpass(),
+    transport="https",
+    port=8443,
+    verify=False,
+)
+
+output = device.show("show hostname")
+print(etree.tostring(output).decode()) <-- prints the XML structure back
+
+# output = device.show("show version")
+# pprint(output)
+
+# output = device.show("show lldp neighbors")
+# pprint(output)
+
+
+* NXAPI and XML command lists and configuration
+
+import requests
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+from lxml import etree
+from getpass import getpass
+from nxapi_plumbing import Device
+
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
+device = Device(
+    api_format="xml",
+    host="nxos1.lasthop.io",
+    username="pyclass",
+    password=getpass(),
+    transport="https",
+    port=8443,
+    verify=False,
+)
+
+cmds = ["show hostname", "show version", "show lldp neighbors"]
+output = device.show_list(cmds)
+for entry in output:
+    print(etree.tostring(entry).decode())
+    input("Hit enter to continue: ")
+
+cmds = ["show version"]
+output = device.show_list(cmds, raw_text=True) raw_text returns a single string instead of structured data
+print(etree.tostring(output[0]).decode())
+
+cfg_cmd = ["logging monitor 2"]
+output = device.config_list(cfg_cmd)
+print(etree.tostring(output[0]).decode())
+
+output = device.save()
+print(output)
+
+# output = device.checkpoint(filename="my_checkpoint2")
+# print(output)
