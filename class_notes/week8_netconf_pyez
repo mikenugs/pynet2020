@@ -1,0 +1,254 @@
+* Netconf
+
+Standarized programmatic interface that is supported by Network vendors and originated at Juniper. NetConf API has a set of layers
+
+Layer                 Example
+---------             ---------------------
+Content               Configuration/Notification Data
+Operations            edit-config
+Messages              <rpc>, <rpc-reply>
+Secure Transport      SSH, TLS, SOAP, HTTPS
+
+Netconf most commonly runs over SSH and port 830 for secure transport. Inside of the SSH session you are going to be passing XML rpc, rpc-reply messages. Inside these rpc messages Netconf supports operations such as get-config and edit-config, lock-device. Inside of that you have the XML data that is being passed or recieved from the device. 
+
+* Yang
+
+Yang is a modeling language and specifies what fields should be there and what is the nature of the data. In other words should there be some type of string or integer and how it is modeled. It does not specify how to get the data to or from the device. It is really more about the structure of the fields. Yang data structures are mapped/translated to XML and transported across the Netconf session. The remote device can deconstruct the XML and get back the Yang data model. Lately there has been a decoupling of the API from things like Netconf to Restconf and GRPC for handling Yang data models. 
+
+* RestConf
+
+Creates a Rest like API interface to transport Yang data models. So instead of using SSH transport for XML it will have a REST API interface using URL's and HTTP's and leverage HTTP GET, POST and DELETE to accomplish what we need to do with the API.
+
+!To enable Netconf on Junos
+set services netconf ssh
+
+!To enable on IOS-XE
+netconf-yang
+
+You will typically we want to use a higher level library to interface with netconf so you do not have to deal with it yourself. Juniper will use pyez for this. 
+
+* Netconf and ncclient
+
+If you are going to do streight netconf you typically use ncclient
+
+from ncclient import manager
+from getpass import getpass
+from pprint import pprint
+
+with manager.connect(
+    host="srx2.lasthop.io",
+    # host="cisco3.lasthop.io",
+    port=830,
+    username="pyclass",
+    password=getpass(),
+    hostkey_verify=False,  <-- turning this off has security implications
+    allow_agent=False,
+    look_for_keys=False,   <-- turning this off has security implications
+) as netconf_manager:
+
+    pprint(netconf_manager.server_capabilities.__dict__)
+
+With Netconf when you make an intitial session each side tells the other what the capabilities are. We check this with the above "netconf_manager.server_capabilities.__dict__"
+
+* Netconf and ncclient grabbing running config and printing it in xml format
+
+import ipdb
+from ncclient import manager
+from getpass import getpass
+
+conn = manager.connect(
+    host="srx2.lasthop.io",
+    username="pyclass",
+    password=getpass(),
+    device_params={"name": "junos"},
+    hostkey_verify=False,
+    allow_agent=False,
+    look_for_keys=False,
+    port=830,
+    timeout=60,
+)
+
+ipdb.set_trace()
+config = conn.get_config(source="running")
+config_xml = config.data_xml
+print(config_xml)
+
+* PyEZ library
+
+Juniper created this library to interface via Netconf via an API to their devices. It is used to provide an easier mechanism to interact with their devices. Juniper has a set of predefined tables where we can gather information from.
+
+* PyEz create a connection and print device facts
+
+from jnpr.junos import Device
+from getpass import getpass
+from pprint import pprint
+
+a_device = Device(host="srx2.lasthop.io", user="pyclass", password=getpass())
+a_device.open()
+pprint(a_device.facts)
+
+* PyEz using EthPortTable to gather interface information
+
+
+from jnpr.junos import Device
+from jnpr.junos.op.ethport import EthPortTable
+from getpass import getpass
+from pprint import pprint
+
+# import ipdb
+
+a_device = Device(host="srx2.lasthop.io", user="pyclass", password=getpass())
+a_device.open()
+
+# ipdb.set_trace()
+ports = EthPortTable(a_device) <-- pass in our NetConf connection to EthPortTable
+ports.get()                    <-- Here we gather the information in a dictionary like object
+
+print(ports)
+print(ports.keys())      <--- to see the interfaces
+pprint(ports.values())   
+pprint(ports.items())    <--- Gives port and config info
+pprint(ports['fe-0/0/7'].keys())
+
+pprint(ports['fe-0/0/7'].items()) <-- Will return zip which means it wants to be iterated over
+
+list(ports['fe-0/0/7'].items()) <-- Will iterate over the items in the port as a list of key pair tuples. 
+
+dict(ports['fe-0/0/7'].items()) <-- Will iterate over the items in the port as a dictionary. 
+
+!or you can iterate via a for loop
+
+for k, v in ports.items():
+    print(k)
+    print(v)
+
+
+
+* PyEz and using Juniper ARP table
+
+from jnpr.junos import Device
+from jnpr.junos.op.arp import ArpTable
+from getpass import getpass
+
+# from pprint import pprint
+
+a_device = Device(host="srx2.lasthop.io", user="pyclass", password=getpass())
+a_device.open()
+
+arp_entries = ArpTable(a_device)
+arp_entries.get()
+
+dir(arp_entries) <-- to see whats availble to us
+
+help(arp_entries) <-- To get more info
+
+* PyEz configuring a device
+
+from jnpr.junos import Device
+from jnpr.junos.utils.config import Config
+from getpass import getpass
+
+a_device = Device(host="srx2.lasthop.io", user="pyclass", password=getpass())
+a_device.open()
+a_device.timeout = 60
+
+cfg = Config(a_device)
+cfg.lock()
+
+cfg.load("set system host-name test123", format="set", merge=True)  <-- With Merge=True it will just add the config. With merge=false it will replace current config with what you are configuring. 
+cfg.rollback(0)
+
+cfg.load("set system host-name test123", format="set", merge=True)
+print(cfg.diff())
+
+# cfg.commit()
+# cfg.commit(comment="Testing from pyez")
+
+cfg.load(path="test_config.conf", format="text", merge=True)
+cfg.unlock()
+
+* PyEz config change from file
+
+from jnpr.junos import Device
+from jnpr.junos.utils.config import Config
+from getpass import getpass
+
+a_device = Device(host="srx2.lasthop.io", user="pyclass", password=getpass())
+a_device.open()
+a_device.timeout = 60
+
+cfg = Config(a_device)
+cfg.lock()
+
+cfg.load(path="test_config.conf", format="text", merge=True)  <-- test is curly brace as apposed to set based
+# cfg.load(path="test_replace.conf", format="text", merge=False) <-- If you set it to replace the config with merge=False you need to also add replace in the config syntax being pushed
+# cfg.commit()
+# cfg.commit(comment="Testing from pyez")
+# cfg.unlock()
+
+!test_config.conf
+
+routing-options {
+    static {
+        route 1.1.1.0/24 next-hop 10.220.88.1;
+    }
+}
+!
+
+* PyEz config changes using XML
+
+Using XML may be preffered by some people as apposed to set based or curly braced config due to possibly having more reliability across a broad set of devices when cofiguring. Also Juniper supposedly uses XML under the hood for its config. 
+
+from jnpr.junos import Device
+from jnpr.junos.utils.config import Config
+from getpass import getpass
+
+a_device = Device(host="srx2.lasthop.io", user="pyclass", password=getpass())
+a_device.open()
+a_device.timeout = 60
+
+cfg = Config(a_device)
+cfg.lock()
+
+cfg.load(path="test_config.xml", format="xml", merge=True)
+# overwrite=True - full configuration replace so be careful
+# cfg.commit(confirm=1)
+# cfg.commit()
+# cfg.unlock()
+
+!test_config.xml
+
+<configuration>
+        <routing-options>
+            <static>
+                <route>
+                    <name>1.1.4.0/24</name>
+                    <next-hop>10.220.88.1</next-hop>
+                </route>
+            </static>
+        </routing-options>
+</configuration>
+!
+
+* PyEz RPC requests to retrieve information
+
+#!/usr/bin/env python
+from __future__ import print_function, unicode_literals
+
+from jnpr.junos import Device
+from lxml import etree
+from getpass import getpass
+
+juniper_srx = {"host": "srx2.lasthop.io", "user": "pyclass", "password": getpass()}
+
+a_device = Device(**juniper_srx)
+a_device.open()
+
+# show version | display xml rpc <-- you must log into the device and run this command to find the RPC command to run. In this case it is the below get-software-information
+# <get-software-information>
+# xml_out = a_device.rpc.get_software_information() <-- we then convert the command to run that we got from the display xml rpc command and remove the tags <> and change the hyphons to underscore to make it a valid python method call. 
+# print(etree.tostring(xml_out, encoding="unicode"))
+
+# get_lldp_neighbors_information()
+xml_out = a_device.rpc.get_lldp_neighbors_information()
+print(etree.tostring(xml_out, encoding="unicode"))
