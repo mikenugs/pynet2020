@@ -1,0 +1,222 @@
+* Napalm
+
+The purpose of Napalm is to create a standard set of operations across a range of platforms. Operations fall under two catagories config and getter operations. 
+Currently each vendors platform has different API's to access their devices. Napalm creates a standardized programmatic interface across core platforms such as Juniper, Arista, Cisco NX-OS, IOS-XE and IOS-XR. With napalm you will have a standard set of methods that can be used across all devices to get results and Napalm when then use the following methods to interact with the devices under the hood.
+
+Juniper - Netconf
+Arista - eAPI
+Cisco NX-OS - NXAPI
+IOS-XR - SSH and XML
+Cisco IOS-XE - Netmiko
+
+There is also a set of Napalm community drivers for vendors that do not fall in the above list.
+
+https://github.com/napalm-automation-community
+
+Napalm also has integration with Salt and Ansible
+
+* Simple Napalm Connection
+
+#!/usr/bin/env python
+from getpass import getpass
+from pprint import pprint
+from napalm import get_network_driver
+
+cisco3 = dict(
+    hostname="cisco3.lasthop.io",
+    device_type="ios",
+    username="pyclass",
+    password=getpass(),
+    optional_args={},
+)
+
+device_type = cisco3.pop("device_type")
+driver = get_network_driver(device_type)
+device = driver(**cisco3)
+
+print()
+print("\n\n>>>Test device open")
+device.open()
+
+print()
+output = device.get_facts()
+pprint(output)
+print()
+
+* Napalm getters
+
+You can find a full list of the Napalm getters per platform below. 
+
+https://napalm.readthedocs.io/en/latest/support/index.html#getters-support-matrix
+
+#!/usr/bin/env python
+from getpass import getpass
+from pprint import pprint
+from napalm import get_network_driver
+
+# Supress SSL Certificate Warnings
+import requests
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
+
+# Device definitions
+password = getpass()
+cisco3 = dict(
+    hostname="cisco3.lasthop.io",
+    device_type="ios",
+    username="pyclass",
+    password=password,
+    optional_args={},
+)
+nxos1 = dict(
+    hostname="nxos1.lasthop.io",
+    device_type="nxos",
+    username="pyclass",
+    password=password,
+    optional_args={"port": 8443},
+)
+eos1 = dict(
+    hostname="arista1.lasthop.io",
+    device_type="eos",
+    username="pyclass",
+    password=password,
+)
+
+# Device we are testing
+my_device = cisco3
+
+# NAPALM Class Selection/Object Creation
+device_type = my_device.pop("device_type")
+driver = get_network_driver(device_type)
+device = driver(**my_device)
+
+# NAPALM Action
+print()
+print("\n\n>>>Test device open")
+device.open()
+
+print()
+# output = device.get_facts()
+output = device.get_interfaces()
+# output = device.get_lldp_neighbors()
+pprint(output)
+print()
+
+* Napalm configuration Merge
+
+With napalm configuration merge you are adding the change and with config replace you are removing the configuration for the config you are pushing. There is also some functionality with doing a compare config as well as discard, commit and rollback. You will have to turn on SCP and archive for IOS. With NX-OS you will need to use a checkpoint file when doing a replace. Their are naunces with platform specifics when performing these so you will need to see the documentation. 
+
+!Enabling Archive in IOS
+
+archive
+ path flash:cisco-3-cfg
+
+!Enable SCP
+
+ip scp server enable
+
+
+#!/usr/bin/env python
+from getpass import getpass
+from napalm import get_network_driver
+
+import requests
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
+
+def hit_enter():
+    input("Hit enter to continue: ")
+
+
+if __name__ == "__main__":
+    host = "nxos1.lasthop.io"
+    username = "pyclass"
+    password = getpass()
+    optional_args = {"port": 8443}
+
+    driver = get_network_driver("nxos")
+    device = driver(host, username, password, optional_args=optional_args)
+
+    print()
+    print(">>>Test device open")
+    device.open()
+    hit_enter()
+
+    print()
+    print(">>>Load config change (merge) - no commit")
+    device.load_merge_candidate(filename="nxos-merge.conf")
+    print(device.compare_config())
+    import ipdb
+
+    ipdb.set_trace()
+    hit_enter()
+
+    print()
+    print(">>>Discard config change (merge)")
+    device.discard_config()
+    print("--- Diff ---")
+    print(device.compare_config())
+    print("--- End Diff ---")
+    hit_enter()
+
+    print()
+    print(">>>Load config change (merge) - commit")
+    device.load_merge_candidate(filename="nxos-merge.conf")
+    # print(device.compare_config())
+    device.commit_config()
+    hit_enter()
+
+    # print()
+    # print(">>>Rollback")
+    # device.rollback()
+    # hit_enter()
+
+!nxos-merge.conf
+vlan 601
+  name blue601
+vlan 602
+  name blue602
+vlan 603
+  name blue603
+!nxos-merge.conf
+
+* Napalm configuration replace
+
+With this you will have a file that has the entire router configuration we will then load it as a candidate config where we can rollback, compare, discard... etc. We use SCP to copy the file over to the system.
+
+#!/usr/bin/env python
+from getpass import getpass
+from napalm import get_network_driver
+
+
+def hit_enter():
+    input("Hit enter to continue: ")
+
+
+if __name__ == "__main__":
+    host = "cisco3.lasthop.io"
+    username = "pyclass"
+    password = getpass()
+    # optional_args = {}
+    optional_args = {"inline_transfer": True}
+
+    driver = get_network_driver("ios")
+    device = driver(host, username, password, optional_args=optional_args)
+
+    print()
+    print(">>>Test device open")
+    device.open()
+    hit_enter()
+
+    print()
+    print(">>>Load config change (replace)")
+    device.load_replace_candidate(filename="cisco3.txt")
+    print(device.compare_config())
+    # device.discard_config()
+    # device.commit_config()
+    # device.rollback()
+    hit_enter()
