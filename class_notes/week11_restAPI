@@ -1,0 +1,202 @@
+* RestAPI
+
+Rest stands for representational state transfer. Network Engineers may need to know how to use the RestAPI because there may be IP address or data center management tools infoblox, netbox... etc that access the tools via a Rest API. There may also be controllers like APIC, NSO ... etc that uses a Rest interface. The devices themselves like the ASA uses the rest API. Also there are internet services that use a Rest API like github. 
+
+ The characteristics of a Restful API include interfacing to it via HTTP or HTTP's. We should access some type of URL which will represent the entity or resource. If you go to a different URL you will access a different resource. With these resources you can perform a GET, PUT "modify", DELETE, CREATE this is known as CRUD.
+
+ With Rest API you should have a broswer such as postman to help you navigate the Rest API. You should also know what Python libraries are available to help you leverage the Rest API as well. You should also use command line utilities like CURL to help you access URL's to see whats available. 
+
+ Postman is a very common tool for accessing devices via a rest API. With Postman you can send commands to the device and view responses. 
+
+ When you first have to use a RestAPI you want to find the documentation on the various URL's to access. You then want to create some basic code on how to retrieve data using the restAPI. You also want to see if there is an existing Python library for the RestAPI. These modules can help with the authentication/headers... etc. 
+
+
+* Using RestAPAI in Python to access device via GET
+
+import requests
+from pprint import pprint
+
+#To make SSL warning go away use the below two lines
+
+from urllib3.exceptions import InsecureRequestWarning
+
+requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
+
+
+if __name__ == "__main__":
+
+    # Failed auth
+    # url = "https://netbox.lasthop.io/api/dcim/devices/"
+    # Working no auth
+    url = "https://netbox.lasthop.io/api/dcim/"
+    # url = "https://api.github.com/"
+    http_headers = {"accept": "application/json; version=2.4;"}
+    response = requests.get(url, headers=http_headers, verify=False) <-- very false tells it not to worry about the missing SSL certificate
+    response = response.json()
+
+    print()
+    pprint(response)
+    print()
+
+* Using RestAPAI in Python to access device via GET with Authentication
+
+import os
+import requests
+from pprint import pprint
+
+
+from urllib3.exceptions import InsecureRequestWarning
+
+requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
+
+
+if __name__ == "__main__":
+
+    token = os.environ["NETBOX_TOKEN"]
+    # url = "https://netbox.lasthop.io/api/dcim/devices"
+    url = "https://netbox.lasthop.io/api/dcim/devices/1"
+    http_headers = {"accept": "application/json; version=2.4;"}
+    if token:
+        http_headers["authorization"] = "Token {}".format(token)
+
+    response = requests.get(url, headers=http_headers, verify=False)
+    response = response.json()
+
+    print()
+    pprint(response)
+    print()
+
+* Using Rest API with Python and creating an Object
+
+import os
+import requests
+import json
+from pprint import pprint
+
+from urllib3.exceptions import InsecureRequestWarning
+
+requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
+
+
+if __name__ == "__main__":
+    """
+    --------------------------------------------------------------------------------
+    HTTP POST
+    URL: https://netbox.lasthop.io/api/dcim/devices/
+    HTTP Headers: {'Content-Type': 'application/json; version=2.4;',
+        'authorization': 'Token aaaabbbbccccddddeeeeffff0000111122223333'}
+    POST DATA: {'name': 'arista4', 'device_role': 3, 'device_type': 2, 'display_name': 'arista4',
+        'platform': 4, 'rack': 1, 'site': 1, 'status': 1}
+    --------------------------------------------------------------------------------
+    """
+
+    token = os.environ["NETBOX_TOKEN"]
+    url = "https://netbox.lasthop.io/api/dcim/devices/"
+    http_headers = {
+        "Content-Type": "application/json; version=2.4;",
+        "authorization": "Token {}".format(token),
+    }
+    post_data = {
+        "name": "arista8",
+        "device_role": 3,  # Distribution Switch
+        "device_type": 2,  # vEOS
+        "display_name": "arista8",
+        "platform": 4,  # Arista EOS
+        "rack": 1,  # RK1
+        "site": 1,  # Fremont Data Center
+        "status": 1,  # Active
+    }
+
+    response = requests.post(
+        url, headers=http_headers, data=json.dumps(post_data), verify=False
+    )
+    response = response.json()
+    print()
+    pprint(response)
+    # print(response._content.decode())
+    print()
+
+* RestAPI with Python modifying an object
+
+import os
+import requests
+import json
+from pprint import pprint
+
+from urllib3.exceptions import InsecureRequestWarning
+
+requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
+
+
+if __name__ == "__main__":
+    """
+    HTTP PUT
+    URL: https://netbox.lasthop.io/api/dcim/devices/8/
+    HTTP Headers: {'Content-Type': 'application/json; version=2.4;', 'authorization': 'Token x'}
+    PUT DATA: {'id': 8, 'name': 'arista6', 'display_name': 'arista6', 'device_type': 2,
+    'device_role': 3, 'tenant': None, 'platform': 4, 'serial': '', 'asset_tag': None,
+    'site': 1, 'rack': 2, 'position': None,
+    'face': None, 'parent_device': None, 'status': 1, 'primary_ip': None, 'primary_ip4': None,
+    'primary_ip6': None, 'cluster': None, 'virtual_chassis': None, 'vc_position': None,
+    'vc_priority': None, 'comments': '', 'tags': [], 'custom_fields': {}, 'created': '2018-11-01',
+    'last_updated': '2018-11-01T12:29:41.716417-07:00', 'local_context_data': None}
+    """
+
+    token = os.environ["NETBOX_TOKEN"]
+
+    # Arista6
+    url = "https://netbox.lasthop.io/api/dcim/devices/8/"
+    http_headers = {
+        "accept": "application/json; version=2.4;",
+        "authorization": "Token {}".format(token),
+    }
+    response = requests.get(url, headers=http_headers, verify=False)
+    arista6 = response.json()
+
+    http_headers = {
+        "Content-Type": "application/json; version=2.4;",
+        "authorization": "Token {}".format(token),
+    }
+
+    # Reformat to get the proper structure for the existing object
+    for field in ["device_role", "device_type", "platform", "site", "rack"]:
+        arista6[field] = arista6[field]["id"]
+    arista6["status"] = 1
+    arista6["rack"] = 2
+
+    response = requests.put(
+        url, headers=http_headers, data=json.dumps(arista6), verify=False
+    )
+    response = response.json()
+    print()
+    pprint(response)
+    # print(response._content.decode())
+    print()
+
+* Rest API with Python using Delete
+
+import os
+import requests
+
+from urllib3.exceptions import InsecureRequestWarning
+
+requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
+
+
+if __name__ == "__main__":
+
+    token = os.environ["NETBOX_TOKEN"]
+
+    # Will need updated to map to arista8 that is created via add_device.py
+    url = "https://netbox.lasthop.io/api/dcim/devices/15/"
+
+    http_headers = {
+        "Content-Type": "application/json; version=2.4;",
+        "authorization": "Token {}".format(token),
+    }
+
+    response = requests.delete(url, headers=http_headers, verify=False)
+
+    if response.ok:
+        print("Device deleted successfully")
+
