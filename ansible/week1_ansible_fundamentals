@@ -1,0 +1,109 @@
+* Ansible
+
+Ansible is a programming langage based on YAML it has for loops and conditionals like other programming languages. Ansible is primarily focused on the configuration management part of automation. It can do configuration gathering as well but its mainly strong in configuration management. We right our Ansible playbooks in YAML. Ansible is a framework for network automation. Salt, Puppet, Nornir are other options of automation frameworks. AdHoc scripting is another option outside of using a framework. 
+
+What is a framework? 
+
+With a library you import the library in your program and then call upon the library. With a framework there is an inversion of control where take Ansible for example it will bundle together our playbook to execute. In other words Ansible will bundle together all the modules to execute them.  
+
+What are the benifits of using a framework?
+
+1.) You have a single tool that can be used by other teams and team members. If you are scripting you can run into issues where engineers use different programming languages based on their preference. This makes it hard to share between engineers and teams.
+
+2.) Not using a framework means there is no systematic approach to inventory and data. 
+
+3.) Using an automation framework like Ansible also provides concurency we can work on multiple devices at the same time.
+
+Git is a great way to track Artifacts. These artifacts can be Ansible playbooks, how we store variables, templates... etc. 
+
+Ansible system components
+
+ - you manage - 
+
+ansible.cfg / Environmental Variables
+Playbooks "your programs"
+Custom modules "requires python"
+Custom filters "python required"
+
+ - written by third parties -
+
+Ansible Engine (Core)
+Collections "Ansible Galaxy Roles" "Way to import third party modules/plugins into the Core"
+Third Party Modules "modules are basically functions you call"
+Third Party Filters
+
+* YAML
+
+We have data structures on our CPU programms and if they are Python they can be lists or dictionaries if they are programming languages they may be arrays or hashes. If we need to transfer this to a different CPU that may run a different programming language we can use serialization which takes data strucures in our program and we serilize it into a stream of bytes so it can be understood on the other CPU with a different language. You can use JSON and YAML and XML to accomplish this. YAML has an advantage over XML and JSON because it is very easy to write. JSON is very good for CPU to CPU communication and YAML is good for human being to CPU communication. 
+
+Below we have a list of strings of colors in YAML
+
+---
+- red
+- green
+- orange
+- black
+- white
+
+
+We can also write the list like this the string can be qouted or not.
+
+---
+[red, green, yellow, 'orange', 'black', 'white']
+
+Here we have an integer of 100 and the rest are boleans
+
+- 100
+- on
+- off
+- true
+- false
+- True
+- False
+
+Here we write a dictionary with key, value pairs. With ip_addr2 we have an inner dictionary for the value we know this because it is indented. 
+
+---
+key1: value1
+key2: value2
+ip_addr: 1.1.1.1
+ip_addr2:
+    hello: world
+    some: thing
+    another: value
+
+Here is a way to write a dictionary in compressed form
+
+---
+{ip_addr: '1.1.1.1',
+ ip_addr2: '2.2.2.2',
+ 'key1': 'value1',
+ 'key2': on}
+
+Here we have an example of a nested data structure where the value of my_ips is a list of IP addresses and the last one is a inner dictionary called key1.
+
+---
+my_ips:
+  - 1.1.1.1
+  - 2.2.2.2
+  - 3.3.3.3
+  - key1:
+      value1
+key2: value2
+ip_addr: 1.1.1.1
+ip_addr2: 2.2.2.2
+
+If your first character in your sting is a bracket or brace you can use qoutes so it ignores it. This way it wont think it is a list or variable
+
+- "{{yellow is my favorite color"
+
+---
+- name: Hello we're going print this to the screen
+  hosts: arista:cisco:nxos1
+  gather_facts: False
+  tasks:
+    - ping:
+
+    - ping:
+
+    - ping:
