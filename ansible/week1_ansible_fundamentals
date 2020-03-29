@@ -97,13 +97,198 @@ If your first character in your sting is a bracket or brace you can use qoutes s
 
 - "{{yellow is my favorite color"
 
+* Connection Local
+
+Ansible was originally intended for Linux systems and using SSH for transport. The Ansible control server would bundle up things from your playbook and create a Python package. It would then ship it over to the remote system and the remote system has Python and it would use its local version of Python to run the Artifact. The output is a JSON response from the remote system going back to the Ansible control machine. With networking devices they often do not have a usable version of Python which causes a problem. So what we do is run Ansible on the Controller locally and then make a connection to itself and ship the bundle module to the controller itself. The Controller will then use an SSH connection or API connection to the remote device. This is historically called "connection local". Ansible over time wanted to change this to make it more consistent with how it interacts with servers so it created ansible connection "network cli", netconf... etc. It still uses a local connection and works the same way. 
+
+* Ansible Inventory
+
+Ansible Inventory is where we store information about the systems Ansible will manage. You can do this statically .ini or yaml format or dynamically. The square brackets contain groups. With any given group you have a list of hosts. You can just put in a hostname or IP address and that will come across in Ansible as inventory_hostname
+
+[arista]
+arista5.lasthop.io   <--- this will come across as inventory_hostname
+
+In this example we add an inventory hostname arista5 that is not DNS resolvable. And we then have to add ansible_host and put the FQDN or IP address after. 
+
+[arista]
+arista5 ansible_host=arista5.lasthop.io
+
+You can also specify variables that will be used acorss a group by specifying the groupname:vars and then putting the variables like we have below. You can also use all:vars for variables that are used across all groups. 
+
+[arista:vars]
+ansible_network_os=eos
+
+!ansible-hosts-alt.ini
+[all:vars]
+ansible_connection=network_cli
+ansible_python_interpreter=~/VENV/ansible/bin/python
+ansible_user=pyclass
+ansible_ssh_pass=INVALID_PASSWORD_CHANGE_THIS
+
+[local]
+localhost ansible_connection=local
+
+[arista]
+arista5 ansible_host=arista5.lasthop.io
+arista6 ansible_host=arista6.lasthop.io
+arista7 ansible_host=arista7.lasthop.io
+arista8 ansible_host=arista8.lasthop.io
+
+[arista:vars]
+ansible_network_os=eos
+#ansible_connection=httpapi
+ansible_httpapi_use_ssl=True
+ansible_httpapi_validate_certs=False
+
+[cisco]
+cisco1 ansible_host=cisco1.lasthop.io
+cisco2 ansible_host=cisco2.lasthop.io
+cisco5 ansible_host=cisco5.lasthop.io
+cisco6 ansible_host=cisco6.lasthop.io
+
+[cisco:vars]
+ansible_network_os=ios
+
+[juniper]
+srx1 ansible_host=srx1.lasthop.io
+
+[juniper:vars]
+ansible_connection=netconf
+ansible_network_os=junos
+
+[nxos]
+nxos1 ansible_host=nxos1.lasthop.io
+nxos2 ansible_host=nxos2.lasthop.io
+
+[nxos:vars]
+ansible_network_os=nxos
+#ansible_connection=httpapi
+ansible_httpapi_use_ssl=True
+ansible_httpapi_validate_certs=False
+ansible_httpapi_port=8443
+
+[san_francisco:children]
+arista
+nxos
+
+[denver:children]
+cisco
+juniper
+
+[cisco_all:children]
+cisco
+nxos
+
+!You can also create child groups as well in a hierarchy
+
+[san_francisco:children]
+arista
+nxos
+
+[denver:children]
+cisco
+juniper
+
+[cisco_all:children]
+cisco
+nxos
+
+!You can specify your default inventory in .ansible.cfg
+
+inventory=~/ansible-hosts.ini
+
+!You can see how the inventory is grouped by using
+
+ansible-inventory --graph
+
+!You can also use -i to specify an inventory file
+
+ansible-inventory -i my-inventory.yaml --graph
+
+!You can also look at your inventory and its attachements in json format by doing
+
+ansible-inventory --list
+
+!You can also write your inventory file in yaml format. As you can see with yaml format indentation is important. 
+
+---
+all:
+  vars:
+    ansible_connection: network_cli
+    ansible_python_interpreter: ~/VENV/ansible/bin/python
+    ansible_user: pyclass
+    ansible_ssh_pass: INVALID_PASSWORD_CHANGE_THIS
+
+  children:
+
+    arista:
+      hosts:
+        arista5:
+          ansible_host: arista5.lasthop.io
+        arista6:
+          ansible_host: arista6.lasthop.io
+        arista7:
+          ansible_host: arista7.lasthop.io
+        arista8:
+          ansible_host: arista8.lasthop.io
+      vars:
+        ansible_network_os: eos
+
+    cisco:
+      hosts:
+        cisco1:
+          ansible_host: cisco1.lasthop.io
+        cisco2:
+          ansible_host: cisco2.lasthop.io
+      vars:
+        ansible_network_os: ios
+
+    juniper:
+      hosts:
+        srx1:
+          ansible_host: srx1.lasthop.io
+      vars:
+        ansible_network_os: junos
+
+    nxos:
+      hosts:
+        nxos1:
+          ansible_host: nxos1.lasthop.io
+        nxos2:
+          ansible_host: nxos2.lasthop.io
+      vars:
+        ansible_network_os: nxos
+
+!Playbooks are written in YAML. They are constructued with one or more plays and these plays will contain one or more tasks. 
+
+The playbook will start with --- to designate that it is yaml
+The leftmost entries are the plays and will typically start with name: This name will be the description of what the play is doing. 
+
+---
+- Play1 entry
+- Play2 entry
+- Play3 entry
+
+ You will then specify the hosts that you will run this on. 
+
+---
+- name: Hello this is the desscription
+  hosts: arista:cisco:nxos1
+
+You then specify the tasks that will be run. All of this is written in dictionary key/value pairs. The task will be a list of tasks. Below we run the ping module. This ping module does not talk to a remote system it is a python script that runs on itself. If you are to specify an arguement for the module it will be indented below like we did for arg1. Ansible will automatically try and gather facts so this can be disabled by setting it to False like we did below.
+
 ---
 - name: Hello we're going print this to the screen
   hosts: arista:cisco:nxos1
   gather_facts: False
   tasks:
     - ping:
+        arg1: firstarguement
 
     - ping:
 
     - ping:
+
+By default Ansible will run this across five forks or five hosts at a time to change that you can
+
+ansible-playbook simple_pb.yml --forks 10
