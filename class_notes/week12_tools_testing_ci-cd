@@ -1,0 +1,221 @@
+* PEP8
+
+Python has a coding standard which tells what the style is for writing code in Python. It is not a requirement as to more best practice. It makes it easier for other programmers to read your code and make additions to your code. 
+
+Things that are important would be
+
+* Line length stay around 100 characters
+* Naming conventions, variables all lowercase underscrores for word seperators, functions all lower case with underscores for word seperators. Class names use camelcase, Constants all uppercase with underscores for seperators
+
+https://www.python.org/dev/peps/pep-0008/
+
+* Linters
+
+Linters are tools that can autoformat your code, or flag it for you to make it PEP8 compatible. There are two main linters pylint and pycodestyle.
+
+You can run these by doing
+
+pylint mypyscript.py
+
+Pycodestyle is another linter and Kirk prefers this over pylint.
+
+pycodestyle .     <--- this will do linting on the directory
+pycodestyle mypyscript.py
+
+Pylama will invoke multiple tools it can do pycodestyle or pylint. Kirk will typically use pylama with pycodestyle and pyflakes. 
+
+!first you will want to edit the setup.cfg 
+
+nano setup.cfg
+
+[pylama]
+linters = mccabe,pep8,pyflakes
+ignore = D203,C901
+skip = tests/*,build/*,.tox/*,netmiko/_textfsm/*,examples/use_cases/*,class4/collateral/textfsm.py
+
+[pylama:pep8]
+max_line_length = 100
+
+linters = mccabe,pep8,pyflakes  <-- pep8 is pycodestyle
+skip = <--- here you specify the directorties like testfsm that you want it to ignore.
+
+If you are in a different directory than where your setup.cfg resides you can
+
+pylama -o ../setup.cfg mypyscript.py
+
+Black is an autoformater of your code. Using a linter and manuelly changing each line can take quite some time. 
+
+black --check .    <--- checks all files and tells you what it would change
+black mypyscript.py
+
+diff file1 file2  <--- to see what it changed
+
+* Pytest
+
+pytest can be used to create tests in python to ensure that your programs have not broken anything as you introduce new code. unittests are another way to do this Kirk prefers pytest. If you had a class it would run anything with Test* and then the function within test_*
+
+When we run this it will traverse all files and subdirecties and run anything with test_* or *_test
+
+py.test -s -v test3/   <--- here we point it to a directory
+py.test -s -v          <--- This will run on the current directory
+py.test -s -v test3/test_sample.py  <--- to run a script in another directory
+py.test -s -v test3/test_sample.py::test_answer  <-- to just run one of the functions in the script.
+
+
+!test_sample.py
+def increment(x):
+    return x + 1
+
+
+def test_answer():
+    assert increment(4) == 5
+
+
+def test_answer2():
+    assert increment(10) == 11
+
+
+def test_answer3():
+    assert increment(1) == 2
+
+
+Here we use Netmiko to do a more real world example of a test
+
+!test_netmiko.py
+
+from getpass import getpass
+from netmiko import ConnectHandler
+
+
+def netmiko_conn():
+    net_connect = ConnectHandler(
+        host="cisco3.lasthop.io",
+        device_type="cisco_ios",
+        username="pyclass",
+        password=getpass(),
+    )
+    return net_connect
+
+
+def test_find_prompt():
+    net_connect = netmiko_conn()
+    assert "cisco3#" in net_connect.find_prompt()
+
+
+def test_send_command():
+    net_connect = netmiko_conn()
+    output = net_connect.send_command("show ip int brief")
+    assert "10.220.88.22" in output
+
+
+Here we use a fixture so that the netmiko connection is only run one time and that particular session can be shared with each function on the script
+
+import pytest
+from getpass import getpass
+from netmiko import ConnectHandler
+
+password = getpass()
+
+
+# @pytest.fixture
+@pytest.fixture(scope="module")
+def netmiko_conn():
+    net_connect = ConnectHandler(
+        host="cisco3.lasthop.io",
+        device_type="cisco_ios",
+        username="pyclass",
+        password=password,
+    )
+    return net_connect
+
+
+def test_find_prompt(netmiko_conn):
+    assert "cisco3#" in netmiko_conn.find_prompt()
+
+
+def test_send_command(netmiko_conn):
+    output = netmiko_conn.send_command("show ip int brief")
+    assert "10.220.88.22" in output
+
+To gracefully disconnect the Netmiko session
+
+
+import pytest
+from getpass import getpass
+from netmiko import ConnectHandler
+
+password = getpass()
+
+
+@pytest.fixture(scope="module")
+def netmiko_conn(request):
+    net_connect = ConnectHandler(
+        host="cisco3.lasthop.io",
+        device_type="cisco_ios",
+        username="pyclass",
+        password=password,
+    )
+
+    def fin():
+        net_connect.disconnect()
+
+    request.addfinalizer(fin)
+    return net_connect
+
+
+def test_find_prompt(netmiko_conn):
+    assert "cisco3#" in netmiko_conn.find_prompt()
+
+
+def test_send_command(netmiko_conn):
+    output = netmiko_conn.send_command("show ip int brief")
+    assert "10.220.88.22" in output
+
+
+You can use a conftest.py file to place all your fixtures. Here our testing code is simplified as pytest will centralize fixtures that can be reused across multiple modules with the conftest.py file. It automatically looks at conftest.py to automatically find fixtures. 
+
+!conftest.py
+
+import pytest
+from getpass import getpass
+from netmiko import ConnectHandler
+
+password = getpass()
+
+
+@pytest.fixture(scope="module")
+def netmiko_conn(request):
+    net_connect = ConnectHandler(
+        host="cisco3.lasthop.io",
+        device_type="cisco_ios",
+        username="pyclass",
+        password=password,
+    )
+
+    def fin():
+        net_connect.disconnect()
+
+    request.addfinalizer(fin)
+    return net_connect
+
+!test_netmiko4.py
+
+def test_find_prompt(netmiko_conn):
+    assert "cisco3#" in netmiko_conn.find_prompt()
+
+
+def test_send_command(netmiko_conn):
+    output = netmiko_conn.send_command("show ip int brief")
+    assert "10.220.88.22" in output
+
+
+Python's tox library lets you test across multiple versions of pythons. It will beuild a virtual environment for each version of python that you want to test against. 
+
+* CI-CD
+
+Continues Integration - this is when you continuesly check on your code in the main branch. This comes from DevOps and fast feedback loops. This comes from the thoery that the smaller the updates the less likely they will have issues and if they do it should be quick to find them.
+If you have a massive change that took months it would be harder to find the issues in all of that code.
+This philosophy also has an automated testing that will fire off to validate that the system is working properly once the test is complete. 
+Continues Delivery - Is the general idea that when the code as it passes all of the tests you will be ok to push it to production. If you are not comfortable pushing it to production then you should be adding more tests.
+
+We use CI-CD in a more loose manner meaning a system of testing that kicks off automatically to make checks into our provisioning system. There are many CI-CD systems travis azure pipelines, jenkins... etc. 
