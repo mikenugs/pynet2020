@@ -1,0 +1,388 @@
+* Ansible Variables
+
+Variables can be stored in the inventory file, the playbook itself or other files. Ansible facts have variables as well and can be used in the program. Kirk generally uses 2 spaces for YAML indentation. 
+
+Here we specify variables under vars: for dns1 and dns2. We also specify a file called my_vars.yml under vars_files:
+
+We also use the ios_facts module to gather facts and we save the output of this module in a variable calles output. 
+
+We then use the debug module to print out the variable in this case output which has the ios_facts information.
+
+The double braces {{}} with the debugs is due to the integration with jinja2. This tells Ansible that there is a variable between.
+
+The qoutes "" around the braces {{}} tells ansibles parser not to interpret this as a dictionary in compressed form.
+
+You can also print out a single variable like we did from ios_facts run like we did below when we did a debug on ansible_net_serialnum
+
+It looks like now when you set gather_facts to True you no longer need to specify the ios_facts module to run to gather the facts. 
+
+When using debug: var it expects jinja2 so you do not have to surround the variable with "" this is true when using when: as well. 
+
+---
+- name: Print out variables
+  hosts: cisco5
+  gather_facts: True
+  vars:
+    dns1: 8.8.8.8
+    dns2: 8.8.4.4
+  vars_files:
+    - my_vars.yml
+  tasks:
+    #- name: Gather Facts from IOS (with register) 
+    #  ios_facts:
+    #  register: output
+
+    #- name: Debug register output
+    #  debug:
+    #    msg: "{{ output }}"
+
+    - name: Debug an ansible_fact from cisco5
+      debug:
+        msg: "{{ ansible_net_serialnum }}"
+        # var: ansible_net_version
+
+!my_vars.yml
+
+---
+ip_addr1: 10.10.10.1
+
+Here we print out a few of the values that we recieve from the ios_facts module.
+
+---
+- name: IOS Example
+  hosts: cisco
+  gather_facts: False
+  tasks:
+    - ios_facts:
+
+    - debug:
+        var: ansible_net_model
+
+    - debug:
+        msg:
+          - "{{ ansible_net_serialnum }}"
+          - "{{ ansible_net_system }}"
+          - "{{ ansible_net_version }}"
+
+
+In this example we print out the ip address that is in the my_vars.yml file. When we print the ansible_host it will print what is to the right of where we specified that in the inventory file. When we print inventory_hostname it is what we specified to the left of ansible_host in the inventory file. 
+
+[arista]
+arista1 ansible_host=arista1.lasthop.io
+
+
+---
+- name: Print out variables
+  hosts: cisco5
+  gather_facts: False
+  vars:
+    dns1: 8.8.8.8
+    dns2: 8.8.4.4
+  vars_files:
+    - my_vars.yml
+  tasks:
+    - name: Debuggiing...
+      debug:
+        msg: "{{ ip_addr1 }}"
+    - name: Var from inventory
+      debug:
+        msg: "{{ ansible_host }}"
+    - name: Var from inventory
+      debug:
+        msg: "{{ inventory_hostname }}"
+
+When there is a conflict with vartiables Ansible has a preference as to where it will prefer the variables.
+
+You can also set facts in a task which sets variables as well. It is common to use set_fact when you recieve variables from your playbook and want to use values from that. 
+
+---
+- name: Print out variables
+  hosts: cisco5
+  gather_facts: False
+  tasks:
+
+    - name: Test setting a fact
+      set_fact:
+        bgp_asn: 22
+        bgp_router_id: 172.31.101.102
+
+    - name: Debug fact
+      debug:
+        msg: "{{ bgp_asn }} --> {{ bgp_router_id }}"
+
+Here we have an example where we prompt a user to enter the AS# then we save that as a variable called bgp_asn. If you set private to yes it will not echo what you are typing to the screen.
+
+---
+- name: Print out variables
+  hosts: cisco5
+  gather_facts: False
+  vars_prompt:
+    - name: bgp_asn
+      prompt: "Enter BGP AS Number: "
+      private: yes
+
+  tasks:
+
+    - name: Debug fact
+      debug:
+        msg: "{{ bgp_asn }}" 
+
+With hostvars and groupvars you can create new directories and store variables in these directories. With host_vars you can put host specific variables and with group_vars you can put any vartiables that belong with that group. As you can see with group_vars the name of the group is Cisco in the inventory file so in the group_vars directory we created a file called cisco.yml which will store that variable for the group.
+
+/group_vars/
+
+!cisco.yml
+
+---
+as_number: 22
+
+/host_vars/
+
+!cisco1.yml
+
+---
+bgp_router_id: 172.31.1.1
+
+!cisco2.yml
+
+---
+bgp_router_id: 172.31.1.2
+
+To look at the directories and the locations of the group_vars and host vars files.
+
+tree -C .
+
+With host_vars you can also optionally create a subdirectory for each host and you can out any file you want in that location. It will read any and all files within that directory and store them for the host.
+
+host_vars and group_vars can be either in the same location of the playbook or the same location as the inventory file. 
+
+* Modules
+
+The tasks are a list of tasks and are indented under tasks. Each task specifies a module that is to be executed. You can specify a name: for the task and that gets printed out when the task is being performed. If you look at the pip module below we specify three arguements which are indented under pip. Ansible will bundle up this python code and use SSH to transfer to the remote maching, it then will execute the code on the remote maching locally. You can essentially think of these modules as functions and argeuments are specified for the functions. 
+
+---
+- name: Simple Playbook
+  hosts: servers
+  tasks:
+    - ping:
+
+    - debug:
+        msg: Hello World
+
+    - name: Install Netmiko
+      pip: 
+        name: netmiko
+        virtualenv: /home/ktbyers/VENV/py3_venv
+        version: 2.4.2
+
+In general there is going to be a platform_command, platform_config, platform_facts modules.
+You will also have feature specific modules as well. 
+
+When working with the ios_command module it is important to set network_cli and the ansible_network_os
+
+!ansible_hosts.ini
+
+[all:vars]
+ansible_connection=network_cli
+
+
+[cisco:vars]
+ansible_network_os=ios
+
+Here we use the ios_command module to run a show ip int brief
+
+---
+- name: IOS Example
+  hosts: cisco
+  gather_facts: False
+  tasks:
+    - ios_facts:
+
+    - debug:
+        var: ansible_net_model
+
+    - ios_command:
+        commands: show ip int brief
+
+Processing data that we get back from Ansible can be a real pain. We need tools to do this. stdout from Ansible does a splitlines on each line so they are an element of a list for each line.
+
+If you specify the following it will prompt you for a username and password in Ansible
+
+ansible-playbook ios_example.yml -k -u mf6872
+
+In this example we run a command and save the output as a variable called output. We then print that variable out. Notice register is at the same level as ios_command. This is because register is not an argument to ios_command
+
+---
+- name: IOS Example
+  hosts: cisco
+  gather_facts: False
+  tasks:
+    - ios_facts:
+
+    - debug:
+        var: ansible_net_model
+
+    - name: Executing command
+      ios_command:
+        commands: show ip int brief
+      register: output
+
+    - debug:
+        var: output
+
+Here we have the same code as above but we are peeling into the output to parse through what we are looking for. You can also use dot notacion in other words output.stdout_lines
+
+---
+- name: IOS Example
+  hosts: cisco
+  gather_facts: False
+  tasks:
+    - ios_command:
+        commands: show ip int brief
+      register: output
+
+    - debug:
+        var: output["stdout_lines"][0][1]
+
+
+Here we can handle multiline processing using Ansible and the ios_command module
+
+---
+- name: IOS Example
+  hosts: cisco5:cisco6
+  gather_facts: False
+  tasks:
+    - ios_command:
+        commands:
+          - command: clear counters gigabitEthernet1
+            # Regular expression for "prompt"--simplify
+            # Clear "show interface" counters on this interface [confirm] 
+            prompt: confirm
+            answer: "y"
+      register: output
+
+    - debug:
+        var: output
+
+    - ios_command:
+        commands: show interfaces gigabitEthernet1
+      register: output
+
+    - debug:
+        msg: "{{ output.stdout[0] }}"
+
+Now we take a look at the Arista EOS command module. Like ios_command we use network_cli and we have the choice of using SSH or a restful type API to connect to the device. When using the restful type EAPI you may not nessasarily get structured data back. 
+
+
+!ansible_hosts.ini
+
+[all:vars]
+ansible_connection=network_cli
+
+[arista:vars]
+ansible_network_os=eos
+#ansible_connection=httpapi
+ansible_httpapi_use_ssl=True
+ansible_httpapi_validate_certs=False
+
+---
+- name: EOS Example
+  gather_facts: False
+  hosts: arista
+
+  tasks:
+    - name: SSH Fact Gathering
+      eos_facts:
+
+    - name: EAPI Fact Gathering
+      vars:
+        ansible_connection: httpapi
+      eos_facts:
+
+    - name: Execute Show Command (eapi)
+      vars:
+        ansible_connection: httpapi
+      eos_command:
+        commands: show arp
+
+Here we pass show interfaces to a filter so we get structured data back. You have to make sure that the command and the platform will support using the filter for json to get back the structured data.
+
+---
+- name: EOS Example
+  gather_facts: False
+  hosts: arista
+
+  tasks:
+    - name: Show command using pipe json
+      eos_command:
+        commands: show interfaces | json
+      register: output
+
+    - debug:
+        var: output.stdout[0]["interfaces"]
+
+Here we run two different commands by passing the list of commands to eos_command
+
+---
+- name: EOS Example
+  gather_facts: False
+  hosts: arista5:arista6
+
+  tasks:
+    - name: "Show command (list of commands)"
+      eos_command:
+        commands: 
+          - show interfaces
+          - show arp
+      register: output
+
+    - debug:
+        var: output
+
+When dealing with running commands on devices with different vendors you have a few options
+
+a.) You can have a unique play and specify the hosts for that vendor and then the command module for that vendor in the play
+b.) You can use conditionals to run the command when it goes through the hosts and matches on a specific host type
+c.) You can use the cli_command module which will work on different vendors
+
+The cli_command works because you specify the vender when you do an ansible_network_os this command works because ansible knows what the platform type is and then it figures out which cli_command module to use internally.
+
+---
+- name: cli_command Example
+  hosts: cisco:arista
+  gather_facts: False
+  tasks:
+    - cli_command:
+        command: show ip int brief
+      register: output
+
+    - debug:
+        msg: "{{ output }}"
+
+When you execute a command and need enable mode priviledges you can pass in additional arguements to go into enable mode
+
+ansible-playbook enable.yml --become-method enable --become -K
+
+You can also embed thsi in the playbook with the become commands that where added below to the play level. You can then just use ansible-playbook enable.yml -K which will prompt you for the secret
+
+---
+# ansible-playbook enable.yml -K
+- name: IOS Example
+  hosts: cisco1
+  gather_facts: False
+  become: yes
+  become_method: enable
+  tasks:
+    - ios_command:
+        commands: show run
+      register: output
+
+    - debug:
+        var: output
+
+You can also optionally add this to the inventory file
+
+[cisco:vars]
+ansible_network_os=ios
+# ansible_become_method=enable
+# ansible_become=True
