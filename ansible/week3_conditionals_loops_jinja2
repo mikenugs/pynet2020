@@ -1,0 +1,708 @@
+Ansible can be thought of as a YAML based programming langagues. It has variables, lists, dictionaries, loops, conditionals, templating with jinja2. Due to these programming cojnstructs you can consider Ansible a programming langague. Due not put to much conditionals in your Ansible playbooks avoid to much complexity as it will get to be unmanageable quickly. 
+
+* Idempotency 
+
+ais the idea that a given operation will only produce one result. So if you run an operation multiple times it will only produce one result. Within the context of networking if you where to run a playbook to push a configuration it will only run it one time to get the end result in place. If the end result is in place it will not re push the configuration. 
+
+* Declaritve configuration 
+
+Is frequently talked about when discussing IaC infrastructure as code. With this you will define what the end state of your configuration will be, but you do not specify how the end state is achieved. So you will have for example the final full config of a router. Some other program behind the scenes will handle how that final configuration is achieved. This will greatly simplify what you have to do if you are creating a program you just specify the desired end state and someone else has worked out all the machanics of how you get to the current state to the new end state. 
+
+* Tags
+
+Let you execute part of your playbook. You can invoke just the tasks that are tagged with facts_only in the below playbook by performing 
+
+ansible-playbook ios_example.yml --tags facts_only
+
+You can also have a list of tags that like we did below.
+
+---
+- name: IOS Example
+  hosts: cisco
+  gather_facts: False
+  tasks:
+    - ios_facts:
+      tags: facts_only
+
+    - debug:
+        var: ansible_net_model
+      tags: facts_only
+
+    - ios_command:
+        commands: show ip int brief
+      tags: show_ip
+      register: output
+
+    - debug:
+        var: output
+      tags: show_ip
+
+    - debug:
+        msg: Hello world
+      tags:
+        - facts_only
+        - show_ip
+
+
+With the limit argument you can specify which hosts you want to limit the run on the playbook
+
+ansible-playbook ios_example.yml --limit cisco1
+
+This will run the playbook and not push a config. It will only check to see if there will be any changes once the playbook is run.
+
+ansible-playbook ios_example.yml --check
+
+* Conditionals
+
+Here we have a simple example of when to run tasks. The first task is False so it does not run and the second task is True so that one is run.
+
+---
+- name: When Testing
+  hosts: local
+  gather_facts: False
+
+  tasks:
+    - name: Hard-coded to False
+      debug:
+        msg: Hello World is False
+      when: False
+
+    - name: Hard-coded to True
+      debug:
+        msg: Hello World is True
+      when: True
+
+Here is a more advanced conditional where it checks the value of a string and if it matches then it runs the task. If you are using the when statement you do not need to specify qoutes and braces to indicate jinja2. Similar to how we have it below. 
+
+---
+- name: When Testing
+  hosts: local
+  gather_facts: False
+  vars:
+    my_str: whatever
+
+  tasks:
+    - name: Testing string equality
+      debug:
+        msg: whatever
+      when: my_str == 'whatever'
+
+This will skip the task because it has a not equal to whatever.
+
+---
+- name: When Testing
+  hosts: local
+  gather_facts: False
+  vars:
+    my_str: whatever
+
+  tasks:
+    - name: Testing string equality
+      debug:
+        msg: whatever
+      when: my_str != 'whatever'
+
+Here we have a substring where it just looks for Cisco IOS in the version string. As long as that is there then it will run the task. 
+
+---
+- name: When Testing
+  hosts: local
+  gather_facts: False
+
+  vars:
+    my_str: whatever
+    version: "Cisco IOS running version 15.2"
+
+  tasks:
+    - name: Substring in larger string
+      debug:
+        msg: This is Cisco IOS
+      when: "'Cisco IOS' in version"
+
+This just needs to ensure that the version variable exists. 
+
+---
+- name: When Testing
+  hosts: local
+  gather_facts: False
+  vars:
+    my_str: whatever
+    version: "Cisco IOS running version 15.2"
+
+  tasks:
+    - name: This variable is defined
+      debug:
+        msg: Variable defined
+      when: version is defined
+
+When you use /bin/false it will return a zero value. We tell it to ignore the restule and our message is triggered because we specify when result is failed to print the message. 
+
+---
+- name: When Testing
+  hosts: local
+  gather_facts: False
+  vars:
+    my_str: whatever
+    version: "Cisco IOS running version 15.2"
+
+  tasks:
+    - command: /bin/false
+      register: result
+      ignore_errors: True
+
+    - debug:
+        msg: "Hello world (failed result)"
+      when: result is failed
+
+Ansible keeps track of all of the hosts it knows about in hostvars. The inventory_hostname is the left most specification in the inventory file. 
+so in other words in the below example it would be arista5. 
+
+[arista]
+arista5 ansible_host=arista5.lasthop.io
+
+Here we are using the gather_facts to create the variables and based on the values of these variables we then execute the specific task if they match the criteria. 
+
+---
+- name: When Testing
+  hosts: cisco
+  gather_facts: True
+
+  tasks:
+    - debug:
+        # msg: "{{ hostvars[inventory_hostname] }}"
+        var: hostvars[inventory_hostname]
+
+    - debug:
+        var: ansible_net_model
+      when: ansible_net_model == "CSR1000V"
+
+    - debug:
+        msg: "{{ ansible_net_version }}"
+      when: '"15.5" in ansible_net_version'
+
+    - debug:
+        msg: "IOS-XE devices"
+      when: '"IOS-XE" in ansible_net_iostype'
+
+* Looping over lists
+
+Here we look at the old format when looping through items in a list which uses with_items. The new format as of Ansible 2.6 is to use the loop command. This will print out hello world five times which each loop. Both tasks work the same and are written in the old/new format. 
+
+---
+- name: With Testing
+  hosts: local
+  tasks:
+    - name: Test with_items
+      debug:
+        msg: Hello world
+      with_items:
+        - 10.10.10.1
+        - 10.10.20.1
+        - 10.10.30.1
+        - 10.10.40.1
+        - 10.10.50.1
+
+    - name: Test loop
+      debug:
+        msg: Hello world (loop)
+      loop:
+        - 10.10.10.1
+        - 10.10.20.1
+        - 10.10.30.1
+        - 10.10.40.1
+        - 10.10.50.1
+
+
+Here we print out the value of each item the first task does this with the old format using with_tems and the second task uses the new format loop
+
+---
+- name: With Testing
+  hosts: local
+  tasks:
+    - name: Test with_items
+      debug:
+        msg: "{{ item }}"
+      with_items:
+        - 10.10.10.1
+        - 10.10.20.1
+        - 10.10.30.1
+        - 10.10.40.1
+        - 10.10.50.1
+
+    - name: Test with_items (loop)
+      debug:
+        msg: "{{ item }}"
+      loop:
+        - 10.10.10.1
+        - 10.10.20.1
+        - 10.10.30.1
+        - 10.10.40.1
+        - 10.10.50.1
+
+Below we have a list of two lists under net_devices. When you use with_tems it flattens nested lists so you will get everything as one list. If you use with_list or loop you can get back what you expect where you will have a list of two lists. Each time you go through the loop you get a item for each element. 
+
+---
+- name: With Testing
+  hosts: local
+  vars:
+    net_devices:
+      - ["rtr1", "rtr2", "rtr3", "rtr4"]
+      - ["sw1", "sw2", "sw3", "sw4"]
+
+  tasks:
+    - name: Example of list flattening
+      debug:
+        msg: "{{ item }}"
+      with_items: "{{ net_devices }}"
+
+    - name: Do not flatten
+      debug:
+        msg: "{{ item }}"
+      with_list: "{{ net_devices }}"
+
+    - name: No flattening
+      debug:
+        msg: "{{ item }}"
+      loop: "{{ net_devices }}"
+
+* Looping over dictionaries
+
+Here we have three dictionaries device1,2 and 3. We show the old way of iterating through the dictionary using with_dict. We also show the new form using loop. When we use loop we pipe it to this filter dict2items which converts it to json. We can look at the key using item.key and the value using item.value.
+
+
+---
+- name: With Testing
+  hosts: local
+  vars:
+    my_devices:
+      device1:
+        ip_addr: 10.10.10.1
+        device_type: cisco_ios
+      device2:
+        ip_addr: 10.10.20.1
+        device_type: cisco_ios
+      device3:
+        ip_addr: 10.10.30.1
+        device_type: juniper_junos
+
+  tasks:
+    - name: Test with_dict
+      debug:
+        msg: "{{ item.key }} --> {{ item.value }}"
+      with_dict: "{{ my_devices }}"
+
+    - name: Test loop
+      debug:
+        msg: "{{ item.key }} --> {{ item.value }}"
+      loop: "{{ my_devices | dict2items }}"
+
+    - debug:
+        msg: "{{ my_devices | dict2items }}" 
+
+Here we just access the key alone. 
+
+---
+- name: With Testing
+  hosts: local
+  vars:
+    my_devices:
+      device1:
+        ip_addr: 10.10.10.1
+        device_type: cisco_ios
+      device2:
+        ip_addr: 10.10.20.1
+        device_type: cisco_ios
+      device3:
+        ip_addr: 10.10.30.1
+        device_type: juniper_junos
+
+  tasks:
+    - name: Test with_dict
+      debug:
+        msg: "{{ item.key }}"
+      with_dict: "{{ my_devices }}"
+
+    - name: Test loop
+      debug:
+        msg: "{{ item.key }}"
+      loop: "{{ my_devices | dict2items }}"
+
+
+Here we access just the value
+
+---
+- name: With Testing
+  hosts: local
+  vars:
+    my_devices:
+      device1:
+        ip_addr: 10.10.10.1
+        device_type: cisco_ios
+      device2:
+        ip_addr: 10.10.20.1
+        device_type: cisco_ios
+      device3:
+        ip_addr: 10.10.30.1
+        device_type: juniper_junos
+
+  tasks:
+    - name: Test with_dict
+      debug:
+        msg: "{{ item.value }}"
+      with_dict: "{{ my_devices }}"
+
+    - name: Test loop
+      debug:
+        msg: "{{ item.value }}"
+      loop: "{{ my_devices | dict2items }}"
+
+
+Here we can access just a single item in the dictionary by specifying item.value then you can use either dotnation and the key name or you can use more pythonic notation using brackets and colons. 
+
+---
+- name: With Testing
+  hosts: local
+  vars:
+    my_devices:
+      device1:
+        ip_addr: 10.10.10.1
+        device_type: cisco_ios
+      device2:
+        ip_addr: 10.10.20.1
+        device_type: cisco_ios
+      device3:
+        ip_addr: 10.10.30.1
+        device_type: juniper_junos
+
+  tasks:
+    - name: Test with_dict
+      debug:
+        msg: "{{ item.value.ip_addr }}"
+      with_dict: "{{ my_devices }}"
+
+    - name: Test loop
+      debug:
+        msg: "{{ item.value['ip_addr'] }}"
+      loop: "{{ my_devices | dict2items }}"
+
+* Loops with conditionals
+
+In the below playbook we will skip the first task since it is set to False and then execute the second task which is set to true. This will print out each item in the list. 
+
+---
+- name: With Testing
+  hosts: local
+  vars:
+    my_devices:
+        - 10.10.10.1
+        - 10.10.20.1
+        - 10.10.30.1
+        - 10.10.40.1
+        - 10.10.50.1
+  tasks:
+    - name: Test with_items
+      debug:
+        msg: "{{ item }}"
+      with_items: "{{ my_devices }}"
+      when: False
+
+    - name: Test using loop
+      debug:
+        msg: "{{ item }}"
+      loop: "{{ my_devices }}"
+      when: True
+
+In the below playbook when using with_tems it iterates through the list and just prints out the first item since that is the only thing that matched the when statement. The second task only prints the fourth item since that is the only thing that matched that when statement. 
+
+---
+- name: With Testing
+  hosts: local
+  vars:
+    my_devices:
+        - 10.10.10.1
+        - 10.10.20.1
+        - 10.10.30.1
+        - 10.10.40.1
+        - 10.10.50.1
+  tasks:
+    - name: Test with_items
+      debug:
+        msg: "{{ item }}"
+      with_items: "{{ my_devices }}"
+      when: "item == '10.10.10.1'"
+
+    - name: Test using loop
+      debug:
+        msg: "{{ item }}"
+      loop: "{{ my_devices }}"
+      when: "item == '10.10.40.1'"
+
+* Jinja2
+
+Is the default templating language used with Python. It is tightly coupled with Ansible. There is a common pattern with programming where you have a source of variables and you run them through template to create output files.
+
+Here we call the templating module which is the module in Ansible which does jinja2 filtering. The source is the router.j2 file and the destionation filename will be hostname.txt. Each unique file will have the hostname variable added to hostname from inventory_hostname. 
+
+---
+- name: Test Jinja2
+  hosts: cisco
+  gather_facts: False
+  tasks:
+    - template:
+        src: router.j2
+        dest: "./CFGS/{{ inventory_hostname }}.txt"
+
+!router.j2
+
+no service pad
+service tcp-keepalives-in
+service tcp-keepalives-out
+service timestamps debug datetime msec localtime show-timezone
+service timestamps log datetime msec localtime show-timezone
+service password-encryption
+!
+hostname {{ inventory_hostname }}
+!
+boot-start-marker
+boot-end-marker
+!
+logging buffered 32000
+no logging console
+
+* Jinja2 conditionals
+
+Here we define our variables under vars: They could have been put in other places but we placed them there for this example. 
+
+---
+- name: Test Jinja2
+  hosts: cisco1
+  gather_facts: False
+  vars:
+    dhcp: True
+    dhcp_exclude1_start: 192.168.200.100
+    dhcp_exclude1_end: 192.168.200.199
+    dhcp_network: 192.168.200.0
+    dhcp_netmask: 255.255.255.0
+    dhcp_gateway: 192.168.200.1
+  tasks:
+    - template:
+        src: dhcp_config.j2
+        dest: "./CFGS/{{ inventory_hostname }}-dhcp.txt"
+
+!dhcp_config.j2
+
+{% if dhcp %}
+no ip dhcp conflict logging
+ip dhcp excluded-address {{ dhcp_exclude1_start }} {{ dhcp_exclude1_end }}
+!
+ip dhcp pool POOL1
+   network {{ dhcp_network }} {{ dhcp_netmask }}
+   default-router {{ dhcp_gateway }}
+   dns-server 8.8.8.8 8.8.4.4
+{% endif %}
+
+Here the template in intf_configs.j2 loops through the cisco_interfaces list that we specify in vars: and creates an interface config that has each of the interfaces in the list. It then saves them with the filename that is specified in dest: under the template task.
+
+---
+- name: Test Jinja2
+  hosts: cisco1
+  gather_facts: False
+  vars:
+    cisco_interfaces:
+      - GigabitEthernet1
+      - GigabitEthernet2
+      - GigabitEthernet3
+      - GigabitEthernet4
+      - GigabitEthernet5
+      - GigabitEthernet6
+      - GigabitEthernet7
+
+  tasks:
+    - template:
+        src: int_config.j2
+        dest: "./CFGS/{{ inventory_hostname }}-interfaces.txt"
+
+!intf_config.j2
+
+{% for interface in cisco_interfaces %}
+interface {{ interface }}
+ switchport access vlan 10
+ spanning-tree portfast
+!
+{% endfor %}
+
+* Looping and conditionals over Dictionaries in Jinja2
+
+As you can see in the below template we loop over the dictionary called ports which is specified in the playbook under vars: We save the keys as port_name and the values as port_attribs. We also have a conditional in the template where is the value for mode is access then it will add the extra two lines of configs and the vlan that goes in the line. Note that the value for the keys in ports is another dictionary with two key/value pairs.
+
+---
+- name: Test Jinja2
+  hosts: cisco1
+  gather_facts: False
+  vars:
+    ports:
+      GigabitEthernet1: {"mode": "access", "access_vlan": 20}
+      GigabitEthernet2: {"mode": "access", "access_vlan": 30}
+      GigabitEthernet3: {"mode": "access", "access_vlan": 40}
+      GigabitEthernet4: {"mode": "access", "access_vlan": 50}
+  tasks:
+    - template:
+        src: int_config2.j2
+        dest: "./CFGS/{{ inventory_hostname }}-interfaces.txt"
+
+!int_config2.j2
+
+{% for port_name, port_attribs in ports.items() %}
+interface {{ port_name }}
+{% if port_attribs.mode == 'access' %}
+ switchport mode access
+ switchport access vlan {{ port_attribs.access_vlan }}
+{% endif %}
+!
+{% endfor %}
+
+
+* Includes
+
+This playbook will use jinja2 to add the hostname in the src template file and save it to the destinaion file name for each host it is run on. It also has an include statement that will add the 881_interfaces.j2 template at the specified location. 
+
+---
+- name: Test Jinja2
+  hosts: cisco1:cisco5
+  gather_facts: True
+  tasks:
+    - template:
+        src: router_includes2.j2
+        dest: "./CFGS/{{ inventory_hostname }}.txt"
+
+##### router_includes.j2 ########
+
+no service pad
+service tcp-keepalives-in
+service tcp-keepalives-out
+service timestamps debug datetime msec localtime show-timezone
+service timestamps log datetime msec localtime show-timezone
+service password-encryption
+!
+hostname {{ inventory_hostname }}
+!
+boot-start-marker
+boot-end-marker
+!
+logging buffered 32000
+no logging console
+!
+{% include '881_interfaces.j2' %}
+!
+no vstack
+!
+line con 0
+ logging synchronous
+ no modem enable
+line aux 0
+line vty 0 4
+ exec-timeout 20 0
+ transport input telnet ssh
+!
+ntp server 130.126.24.24
+ntp server 152.2.21.1
+!
+end
+
+######  881_interfaces.j2  #######
+
+interface FastEthernet0
+ no ip address
+!
+interface FastEthernet1
+ no ip address
+!
+interface FastEthernet2
+ no ip address
+!         
+interface FastEthernet3
+ no ip address
+!         
+interface FastEthernet4
+ description *** LAN connection (don't change) ***
+ ip address 10.220.88.20 255.255.255.0
+ duplex auto
+ speed auto
+!
+
+You can also use the ansible_net_model to create the interface config templates differently based on the model specified in the inventory file. 
+
+{% include ansible_net_model + '_interfaces.j2' %}
+
+* Modular includes
+
+---
+- name: Test Jinja2
+  hosts: cisco1
+  gather_facts: False
+  tasks:
+    - template:
+        src: modular_template.j2
+        dest: "./CFGS/{{ inventory_hostname }}.txt"
+
+##### modular_template.j2 ######
+
+{% include "services.j2" %}
+!
+hostname cisco1
+!
+boot-start-marker
+boot system flash c880data-universalk9-mz.155-3.M8.bin
+boot system flash c880data-universalk9-mz.154-2.T1.bin
+boot-end-marker
+!
+!
+logging buffered 10000
+no logging console
+enable secret 5 $1$39ck$mpfZ3sWVn10YCXhSWI48R/
+!
+{% include "aaa.j2" %}
+ethernet lmi ce
+memory-size iomem 10
+clock timezone PST -8 0
+clock summer-time PDT recurring
+!
+line con 0
+ logging synchronous
+ no modem enable
+line aux 0
+line vty 0 4
+ exec-timeout 20 0
+ transport input telnet ssh
+!
+scheduler max-task-time 5000
+{% include "ntp.j2" %}
+!
+end
+
+###### services.j2 ######
+
+no service pad
+service timestamps debug datetime msec localtime show-timezone
+service timestamps log datetime msec localtime show-timezone
+no service password-encryption
+
+###### aaa.j2 ######
+
+aaa new-model
+!
+!
+aaa authentication login default local
+aaa authorization exec default local if-authenticated
+!
+!
+!
+!
+!
+aaa session-id common
+
+###### ntp.2 ######
+
+ntp server 130.126.24.24
+ntp server 152.2.21.1
+
