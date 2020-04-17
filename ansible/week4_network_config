@@ -1,0 +1,371 @@
+* Configuration Management
+
+In a network automation context we are fundementally concerned with using Ansible to make configuration changes. 
+
+Idemportency = Regardless of the starting state your scripts will acheive the desired end state. It also implies that things only get changed if they are not in the desired state. If they are already in the desired state they will not be changed.
+
+Declaritive = In general means that we will specify the configuration that we want to achieve and we will leave it up to software to go through the machanics of taking us from the current state to the desired end state. In the context of network automation if you add a vlan will it remove others, or is it just an incremental change? If we are specifying a vlan and we want it to remove the other vlans then we would want Ansible to have the ability of removing the other vlans without us having to specify the no vlan for the vlans we want to remove. With vlans this is easy but there are other configs that are more complex. 
+
+ACID-like transactions = This is when you specify a set of configurations and when some of the config fails it will all of the config will fail. In the case where a config dies somewhere in the middle you want none of the config to be deployed so the router is not in a incorrect config state. Napalm provides this functionality when run inside Ansible. 
+
+General Solutions = Are modules in Ansible Core that have an _config such as ios_config, eos_config, cli_config "which will pick the one that matches your platform from the inventory file". Kirk prefers these.
+
+Specific Solutions = This includes things such as resource modules, feature specific modules.. etc. There is also a set of net_modules that relies on the OS you specify for the platform and will execute some feature specific modules. 
+
+Resource Modules = Released in Ansible 2.9 examples of these modules are below. What is unique about these modules is that there is an applied data model with these modules. This same data model is also associated with the facts for that resource. In 2.9 there are issues with these modules that will hopefully be resolved in 2.10. 
+
+*os_interfaces
+(e.g. ios_interfaces for Cisco IOS-XE)
+*os_l2_interfaces
+*os_l3_interfaces
+*os_lacp
+*os_vlans 
+
+As you can see below we have a way not to tell Ansible via eos-Facts what resources to gather based on these new resource modules. 
+
+---
+- name: RM Facts
+  hosts: arista5
+  gather_facts: True
+  module_defaults:
+    eos_facts:
+      gather_network_resources:
+        - vlans
+        - interfaces
+        - l2_interfaces
+        - l3_interfaces
+        - lacp
+        - lldp_global
+        - lldp_interfaces
+        - lag_interfaces
+
+  tasks:
+    - name: Test
+      debug:
+        var: ansible_network_resources
+      tags: rm_all
+
+    - name: VLANs only
+      debug:
+        var: ansible_network_resources.vlans
+      tags: vlans
+
+* Resources modules for l3 interface configuration
+
+Here we specify the ios_interfaces resource module to change the interface config for f0 to add a description, speed and duplex. With merge it adds the config, if we specify replace it only replaces the lines we are configuring with the lines that are currently there. It does not overwrite the whole config. If we use replace it will replace whatever is currently configured with what we specify in the resource module. Currently the replace module does not work quite as intended. 
+
+- name: Interface configuration
+  hosts: cisco1
+  gather_facts: False
+  tasks:
+    - name: Update interface config
+      ios_interfaces:
+        config:
+          - name: FastEthernet0
+            description: 'Testing Ansible configuration'
+            enabled: True
+            # speed: "100"
+            # duplex: full
+            speed: auto
+            duplex: auto
+        state: merged
+        # state: replaced
+
+* Resources modules for l2 interface configuration
+
+Here we have an example of configuring a device on an Arista switch with layer 2 interface port configs. With the below configuration and this module as of Ansible 2.9 if interface 7 was an access port prior the access port config will stay in place. Hopefully that will be resolved in the future.
+
+- name: Interface configuration
+  hosts: arista5
+  gather_facts: False
+  tasks:
+    - name: Update l2 interface config
+      eos_l2_interfaces:
+        config:
+          - name: Ethernet6
+            access:
+              vlan: 20
+          - name: Ethernet7
+            trunk:
+              native_vlan: 7
+        state: merged
+
+Just like the playbook above but this one is executed on NXOS device
+
+- name: Interface configuration
+  hosts: nxos1
+  gather_facts: False
+  tasks:
+    - name: Update l2 interface config
+      nxos_l2_interfaces:
+        config:
+          - name: Ethernet1/3
+            access:
+              vlan: 30
+          - name: Ethernet1/4
+            trunk:
+              native_vlan: 20
+        state: merged
+
+Here we run a layer 3 config for Arista. 
+
+- name: Interface configuration
+  hosts: arista5
+  gather_facts: False
+  tasks:
+    - name: Update l3 interface config
+      eos_l3_interfaces:
+        config:
+          - name: Loopback99
+            ipv4:
+              - address: 192.168.217.1/24
+              - address: 192.168.218.1/24
+                secondary: True
+            ipv6:
+              - address: 2001:db8:0:1::1/64
+        state: merged
+
+This playbook can be used to look at the running config of the interfaces
+
+- name: Show interface configuration
+  hosts: arista5:nxos1
+  gather_facts: False
+  tasks:
+    - name: Show interface config (eos)
+      eos_command:
+        commands:
+          - show run int Ethernet6
+          - show run int Ethernet7
+      register: output
+      tags: eos
+      when: "ansible_network_os == 'eos'"
+
+    - debug:
+        var: output["stdout_lines"]
+      tags: eos
+      when: "ansible_network_os == 'eos'"
+
+    - name: Show interface config (nxos)
+      nxos_command:
+        commands:
+          - show run int Ethernet1/3
+          - show run int Ethernet1/4
+      register: output
+      tags: nxos
+      when: "ansible_network_os == 'nxos'"
+
+    - debug:
+        var: output["stdout_lines"]
+      tags: nxos
+      when: "ansible_network_os == 'nxos'"
+
+    - name: switchport config
+      nxos_config:
+        parents: "interface {{ item }}"
+        lines:
+          - switchport
+      tags: nxos_cfg
+      when: "ansible_network_os == 'nxos'"
+      loop:
+        - Ethernet1/3
+        - Ethernet1/4
+
+* Feature modules
+
+
+You will notice we use a multiline string in yaml for the banner using |
+
+You will notice with the second banner we use lookup to find a file that specified the banner with "{{ lookup('file', './ios_banner.txt') }}"
+
+
+
+---
+- name: IOS Banner
+  hosts: cisco
+  gather_facts: False
+  tasks:
+    - name: Configure the login banner
+      ios_banner:
+        banner: login
+        text: |
+          *****************************************
+          Cisco IOS banner configured via Ansible
+          Skynet take-over commencing...
+          *****************************************
+        state: present
+      tags: banner_add
+
+    - name: Configure the login banner
+      ios_banner:
+        banner: login
+        text: "{{ lookup('file', './ios_banner.txt') }}"
+        state: present
+      tags: banner_add_file
+
+    - name: Configure the login banner
+      ios_banner:
+        banner: login
+        state: absent
+      tags: banner_remove
+
+Here we use the feature specific module to configure a BGP peer.
+
+---
+- name: BGP configuration
+  hosts: cisco1
+  gather_facts: False
+  tasks:
+    - name: Testing BGP configuration
+      ios_bgp:
+        config:
+          bgp_as: 42
+          router_id: 10.220.88.20
+          log_neighbor_changes: True
+          # neighbor 10.220.88.38 remote-as 44
+          neighbors:
+            - neighbor: 10.220.88.38
+              remote_as: 44
+              timers:
+                keepalive: 300
+                holdtime: 360
+                min_neighbor_holdtime: 360
+          networks:
+            - prefix: 192.0.2.0
+              masklen: 23
+        operation: override
+
+This feature module will actually run a true ping as apposed to the default Ansible ping module. 
+
+---
+- name: Test ping
+  hosts: cisco1:cisco2
+  gather_facts: False
+  tasks:
+    - name: Test reachability
+      ios_ping:
+        dest: 10.220.88.1
+
+
+* Arista feature modules
+
+Here is a depreciated Arista feature module for configuring layer 2 interfaces. 
+
+---
+- name: Interface configuration
+  hosts: arista5
+  gather_facts: False
+  tasks:
+    - name: Ensure mode is trunk
+      eos_l2_interface:
+        name: Ethernet7
+        mode: trunk
+        native_vlan: "7"
+
+Similar to above here is a module to configure layer 2 interfaces on NXOS
+
+---
+- name: Interface configuration
+  hosts: nxos1
+  gather_facts: False
+  tasks:
+    - name: Configure 'switchport'
+      nxos_interface:
+        name: "{{ item }}"
+        mode: layer2
+      loop:
+        - Ethernet1/3
+        - Ethernet1/4
+
+    - name: Ensure mode is trunk
+      nxos_l2_interface:
+        name: Ethernet1/4
+        mode: trunk
+        native_vlan: "4"
+      tags: trunk
+
+* net_*modules
+
+These are modules that are not tied to any particular vendor. The way that these work is you now specify ansible_network_os in your enventory file to specify the vendor for the platform. This way you do not have to do conditional logic with your playbooks to bind vendor specific modules to your play. Ansible will automatically switch the module based on what is specified with ansible_network_os in your envintory file. 
+
+
+This is simlar to the ios ping we ran above but it uses the net_ping module
+
+---
+- name: Test ping
+  hosts: cisco1:cisco2
+  gather_facts: False
+  tasks:
+    - name: Test reachability
+      net_ping:
+        dest: 10.220.88.1
+
+
+* Handlers
+
+We want itempotency with our playbooks and in the below example we only want it to save the config if we made the vlan change. The way that we leverage this handler is the handler is in the same indentation level as the nxos_vlan add. The notify for the vlan task works by specifying the name of the handler task. The name must exactly match and if there is a change with the nxos_vlan task then it will notify the handler to run. If there is no change then the handler task does not run. With the vlans the ones specified in group_vars
+will be looped through. The vlan list is created by concatinating vlans_common and vlans_unique together. 
+
+---
+- name: NXOS Example
+  hosts: nxos
+  tasks:
+    - name: Configure NEXUS VLANs
+      nxos_vlan:
+        vlan_id: "{{ item.vlan_id }}"
+        admin_state: "{{ item.admin_state }}"
+        name: "{{ item.name }}"
+      loop: "{{ vlans }}"
+      notify: write mem
+
+  handlers:
+    - name: write mem
+      nxos_command:
+        commands: copy run start
+      changed_when: True
+
+!/group_vars/nxos.yml
+---
+vlans_common:
+  - vlan_id: 550 
+    admin_state: up
+    name: BLACK
+  - vlan_id: 551 
+    admin_state: up
+    name: ORANGE
+  - vlan_id: 552 
+    admin_state: up
+    name: PINK
+
+vlans: "{{ vlans_common }} + {{ vlans_unique|default([]) }}"
+
+!host_vars/nxos1/vlans.yml
+
+---
+vlans_unique:
+  - vlan_id: 559
+    admin_state: up
+    name: BROWN
+
+
+* Assert
+
+Will check to see if conditions are True and if so it will run the playbook. Here we make sure that the NXOS systems are in the correct state before we proceed. It checks to make sure that the hostname is nxos1 and the Model information as well. If those facts that we gather through get facts are not True then the playbook will fail. 
+
+---
+- name: Test Assert
+  hosts: nxos
+  gather_facts: True
+  tasks:
+    - debug:
+        var: ansible_facts
+
+    - name: Test Assert
+      assert:
+        that:
+          - True
+          - ansible_facts.net_model == "Nexus9000 9000v Chassis"
+          - ansible_facts.net_hostname == "nxos1"
+
+    - name: Test debug task
+      debug:
+        msg: After assert task
