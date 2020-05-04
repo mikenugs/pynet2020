@@ -1,0 +1,523 @@
+Gerneric or general solution Ansible Modules for performing network configuration can be considered *_config such as ios_config, nxos_config, eos_config and junos_config. This can be considered as a programmatic way to enter conf t for changes on a device for configuration. There is a notion of hierarchy and idempotency that should generally work. These would be apposed to using more feature specific modules, resource_modules or net_modules.
+
+Arguements for these modules
+* Hierarchy arguments (parents/before/after)
+* Backup arguements
+* Diff arguments
+* Save When arguements
+* Lines/Source (actual config changes)
+
+* The below playbook will add the three lines of config to Cisco 5
+
+---
+- name: IOS Example1
+  hosts: cisco5
+  gather_facts: False
+  tasks:
+    - name: Global config
+      ios_config:
+        lines:
+          - ip domain name bogus.com
+          - ntp server 130.126.24.24
+          - ntp server 152.2.21.1
+
+* You can also use variables inbeded in the lines to take advantage of jinja2. This also saves the config when a change has been made.
+
+---
+- name: IOS Example2
+  hosts: cisco5
+  gather_facts: False
+  tasks:
+    - name: Global config
+      ios_config:
+        lines:
+          - "ip domain name {{ domain_name }}"
+          - "ntp server {{ ntp_server1 }}"
+          - "ntp server {{ ntp_server2 }}"
+        save_when: changed
+        backup: True
+
+/group_vars/all.yml
+
+---
+ntp_server1: 130.126.24.24
+ntp_server2: 152.2.21.1
+domain_name: bogus.com
+dns_server1: 8.8.8.8
+dns_server2: 8.8.4.4
+
+* Since IOS and IOS XE slightly differ on how to configure name servers this playbook would not be idempotent if run on a device where the config did not match. What we do here is use when to only run the config when it matches the iostype that comes back when running the facts module. 
+
+---
+- name: IOS Example3
+  hosts: cisco
+  gather_facts: True
+  tasks:
+    - name: name-server for IOS
+      ios_config:
+        lines:
+          - "ip name-server {{ dns_server1 }}"
+          - "ip name-server {{ dns_server2 }}"
+        save_when: changed
+      when: ansible_facts.net_iostype == "IOS"
+
+    - name: name-server for IOS-XE
+      ios_config:
+        lines:
+          - "ip name-server {{ dns_server1 }} {{ dns_server2 }}"
+        save_when: changed
+      when: ansible_facts.net_iostype == "IOS-XE"
+
+#    - name: Save configuration when modified
+#      ios_config:
+#        save_when: modified
+
+* Here we push a configuration from a file
+
+---
+- name: IOS Example
+  hosts: cisco
+  gather_facts: True
+  tasks:
+    - name: Global config
+      ios_config:
+        src: new_config.txt
+        save_when: changed
+
+!new_config.txt
+
+ip domain name bogus.com
+ntp server 130.126.24.24
+ntp server 152.2.21.1
+
+* Here we use the when condition so we can have two different files one for the unique config that goes with either ios or ios-xe which are both in the cisco group. 
+
+---
+- name: IOS Example
+  hosts: cisco
+  gather_facts: True
+  tasks:
+    - name: Global config
+      ios_config:
+        src: ios_config.txt
+        save_when: changed
+        diff_against: running
+      when: ansible_facts.net_iostype == "IOS"
+
+    - name: Global config
+      ios_config:
+        src: iosxe_config.txt
+        save_when: changed
+        diff_against: running
+      when: ansible_facts.net_iostype == "IOS-XE"
+
+
+!iosxe_config.txt
+
+ip domain name bogus.com
+ntp server 130.126.24.24
+ntp server 152.2.21.1
+ip name-server 8.8.8.8 8.8.4.4
+
+
+* If you run the diff option it will tell you the specifics of what exactly was changed during the playbook run.
+
+ansible-playbook ios_config.yml --diff
+
+* Here we have a playook thats source file is a j2 template. The template itself checks the iostype and based on that result executes the appropriate config lines. 
+
+---
+- name: IOS Example
+  hosts: cisco
+  gather_facts: True
+  tasks:
+    - name: Global config
+      ios_config:
+        src: ios_config.j2
+
+
+ip domain name {{ domain_name }}
+ntp server {{ ntp_server1 }}
+ntp server {{ ntp_server2 }}
+{% if ansible_facts.net_iostype == "IOS" %}
+ip name-server {{ dns_server1 }}
+ip name-server {{ dns_server2 }}
+{% elif ansible_facts.net_iostype == "IOS-XE" %}
+ip name-server {{ dns_server1 }} {{ dns_server2 }}
+{% endif %}
+
+!/group_vars/all.yml
+
+---
+ntp_server1: 130.126.24.24
+ntp_server2: 152.2.21.1
+domain_name: bogus.com
+dns_server1: 8.8.8.8
+dns_server2: 8.8.4.4
+
+* With the first play we perform a diff against the running config and the startup config. We also specify two lines to ignore when doing the diff. When running the playbook I would suggest using the --diff option to see the diff changes. The second play we specify some config lines and perform a diff against the startup config based on those config lines. And the third play which is commented out we specify a file to perform the diff against. 
+
+---
+- name: IOS Example
+  hosts: cisco1:cisco2
+  gather_facts: True
+
+  tasks:
+    - name: Check the startup-config against the running-config
+      ios_config:
+        diff_against: startup
+        diff_ignore_lines:
+          - ntp clock .*
+          - certificate self-signed .*
+      tags: diff_against
+
+    - ios_config:
+        lines:
+          - "ip domain name {{ domain_name }}"
+          - "ip name-server {{ dns_server1 }}"
+          - "ip name-server {{ dns_server2 }}"
+          - "ntp server {{ ntp_server1 }}"
+          - "ntp server {{ ntp_server2 }}"
+        diff_against: running
+        save_when: changed
+      tags: ios_config
+
+#    - name: Check against a reference configuration
+#      ios_config:
+#        diff_against: intended
+#        intended_config: "{{ lookup('file', 'cisco1_config.txt') }}"
+
+* Here we perform a config using the nxos_config module. We use nxapi as the connection method as apposed to SSH.
+
+---
+- name: NXOS Config Change
+  hosts: nxos
+  gather_facts: False
+  vars:
+    ansible_connection: httpapi
+    # Set in inventory
+    # ansible_httpapi_use_ssl=True
+    # ansible_httpapi_validate_certs=False
+    # ansible_httpapi_port=8443
+
+  tasks:
+    - nxos_config:
+        lines:
+          - "ip domain-name {{ domain_name }}"
+          - "ip name-server {{ dns_server1 }} {{ dns_server2 }}"
+          - "ntp server {{ ntp_server1 }} use-vrf management"
+          - "ntp server {{ ntp_server2 }} use-vrf default"
+
+* Here we have an example of pushing a configuration to a juniper device
+
+---
+- name: Juniper Config Change
+  hosts: juniper
+  gather_facts: False
+  tasks:
+    - name: Juniper using NETCONF
+      junos_config:
+        lines:
+          - "set system domain-name {{ domain_name }}"
+
+* Here we make a config change on the below two cisco devices. The argument is not a line it is a multiline yaml and puts a new line automatically. The variables are pulled in using group_vars. This uses the cli_config module which can be used for multiple vendors. cli_config does not support the hierarchical configuration such as before or after.
+
+---
+- name: IOS Example (cli_config)
+  hosts: cisco1:cisco2
+  gather_facts: False
+  tasks:
+    - cli_config:
+        config: | 
+          ip domain name {{ domain_name }}
+          ntp server {{ ntp_server1 }}
+          ntp server {{ ntp_server2 }}
+          ip name-server {{ dns_server1 }}
+          ip name-server {{ dns_server2 }}
+
+* Here we pull in the config from an external file using Ansible's template lookup. This is similar than just pulling up a file but it will also do the jinja2 rendering as well. Here we have conditionals in our template as well. 
+
+
+---
+- name: IOS Example (cli_config)
+  hosts: cisco
+  gather_facts: True
+  tasks:
+    - cli_config:
+        config: "{{ lookup('template', 'ios_config.j2') }}"
+
+!ios_config.j2
+
+ip domain name {{ domain_name }}
+ntp server {{ ntp_server1 }}
+ntp server {{ ntp_server2 }}
+{% if ansible_facts.net_iostype == "IOS" %}
+ip name-server {{ dns_server1 }}
+ip name-server {{ dns_server2 }}
+{% elif ansible_facts.net_iostype == "IOS-XE" %}
+ip name-server {{ dns_server1 }} {{ dns_server2 }}
+{% endif %}
+
+* Here we store the base config file in a unique direcory for each platform. The platform name is the directory and matches the value we get back from running facts and comes back as ansible_network_os
+
+---
+- name: Multiple Platforms Example (cli_config)
+  hosts: cisco1:cisco2:nxos:juniper
+  gather_facts: False
+  vars:
+    ansible_connection: network_cli
+  tasks:
+    - cli_config:
+        config: "{{ lookup('template', 'templates/{{ ansible_network_os }}/base_config.j2') }}"
+
+/ios/base_config.j2
+
+ip domain name {{ domain_name }}
+ntp server {{ ntp_server1 }}
+ntp server {{ ntp_server2 }}
+ip name-server {{ dns_server1 }}
+ip name-server {{ dns_server2 }}
+
+/junos/base_config.j2
+
+set system domain-name {{ domain_name }}
+
+/nxos/base_config.j2
+
+ip domain-name {{ domain_name }}
+ip name-server {{ dns_server1 }} {{ dns_server2 }}
+ntp server {{ ntp_server1 }} use-vrf management
+ntp server {{ ntp_server2 }} use-vrf default
+
+* There is a hierarchy that is indicated by space based indentation with IOS. Ansible will look at parents and it will know that the parent line is above the lines: specified below in the hierarchy. The lines will be indented underneath the parent. The before argument indicated before it executes anything else it will execute the before command. The replace block says it will replace all of the lines. In other words if it notices some lines already there Ansibles default action only replaces the lines it sees are missing. With match line it says it does not care about the order of the lines. So if all of the lines happen to be there but in a different order then it will not reapply the access list. If you care about the order then you will change match line to match strict. If you have match strict as long as you have the lines in order it is fine even if you have extra lines at the end. If you use match exact all of the lines have to match. 
+
+---
+- name: IOS Example (hierarchy)
+  hosts: cisco1
+  gather_facts: False
+  tasks:
+    - name: Config with hierarchy
+      ios_config:
+        before: no ip access-list extended TEST99
+        parents: ip access-list extended TEST99
+        lines:
+          - permit ip host 1.1.1.1 any
+          - permit ip host 2.2.2.2 any
+          - permit ip host 5.5.5.5 any
+          - permit ip host 3.3.3.3 any
+#          - permit ip host 4.4.4.4 any
+        match: exact
+        replace: block
+
+The replace block says that any time you make a change you completely blow away the interface config and add what we request. 
+
+---
+- name: EOS Example (hierarchy)
+  hosts: arista6
+  gather_facts: False
+  tasks:
+    - name: Config with hierarchy
+      eos_config:
+        before: no interface Loopback99
+        parents: interface Loopback99
+        lines:
+          - description * Test via Ansible *
+          - ip address 172.16.31.1/32
+          - ipv6 address 2001:db8:0:1::2/128
+        match: line
+        replace: block
+
+
+You will get an error with the below playbook if the interface does not exist. Here we added the loopback interface first so we do not get an error when running the playbook. 
+
+---
+- name: IOS Example (hierarchy)
+  hosts: cisco1
+  gather_facts: False
+  tasks:
+    - name: Ensure interface exists
+      ios_config:
+        lines:
+          - interface Loopback99
+
+    - name: Config with hierarchy
+      ios_config:
+        before: no interface Loopback99
+        parents: interface Loopback99
+        lines:
+          - ip address 172.16.31.1 255.255.255.0
+          - description * Test via Ansible *
+        match: line
+        replace: block
+
+
+* Here we have an example using jinja2. We create a list of lists under vars: and ike_policy. The jinja2 template loops through our list of lists to create its IPSEC config policy. The first play genertates the file. The second play deploys the file. The third play is a combination of the first two and performs it in a one step process instead of two step process. 
+
+---
+- name: Jinja2 and config push
+  hosts: cisco1
+  gather_facts: False
+  vars:
+    ike_policy:
+      - ["10", "aes"]
+      - ["20", "aes 192"]
+      - ["30", "aes 256"]
+
+  tasks:
+    - name: Generate IKE configuration
+      template:
+        src: ike_template.j2
+        dest: cisco_cfg_ike.txt
+      tags: two_stage
+
+    - name: Push templated config
+      ios_config:
+        src: cisco_cfg_ike.txt
+        save_when: changed
+      tags: two_stage
+
+    - name: Generate and deploy
+      ios_config:
+        src: ike_template.j2
+        save_when: changed
+      tags: one_stage
+
+!/ike_template.j2
+
+{% for policy_id, encr in ike_policy %}
+crypto isakmp policy {{ policy_id }}
+ encr {{ encr }}
+ authentication pre-share
+ group 5
+!
+{% endfor %}
+
+!/cisco_cfg_ike.txt
+
+crypto isakmp policy 10
+ encr aes
+ authentication pre-share
+ group 5
+!
+crypto isakmp policy 20
+ encr aes 192
+ authentication pre-share
+ group 5
+!
+crypto isakmp policy 30
+ encr aes 256
+ authentication pre-share
+ group 5
+!
+
+* To setup SSH key access to devices you will first want to setup the SSH key on your platform wether it is IOS, EOS... etc. You will then want to edit your inventory file to add the location of the private key to access the device.
+
+[all:vars]
+ansible_connection=network_cli
+ansible_python_interpreter=/home/student5/VENV/ansible/bin/python
+ansible_user=student1
+
+[cisco]
+cisco1 ansible_host=cisco1.lasthop.io
+cisco2 ansible_host=cisco2.lasthop.io
+
+[cisco:vars]
+ansible_network_os=ios
+ansible_ssh_private_key_file="/home/student5/.ssh/student_key"
+
+* Here our playbook does not specify authentication and will use the SSH key specified in the inventory file. 
+
+---
+# ansible-playbook ios_config1.yml -i ./ansible-hosts.ini 
+# --private-key /home/student5/.ssh/student_key
+- name: IOS example using Keys
+  hosts: cisco1:cisco2
+  gather_facts: False
+  tasks:
+    - name: Global config
+      ios_config:
+        lines:
+          - ip domain name bogus.com
+          - ntp server 130.126.24.24
+          - ntp server 152.2.21.1
+
+* You can also specify the SSH key via the command line by doing the following command. 
+
+ansible-playbook ios_config1.yml -i ./ansible-hosts.ini --private-key /home/student5/.ssh/student_key
+
+* Ansilble modules
+
+In the past almost all Ansible modules belong to Ansible core. Ansible is moving away from that to make the software more manageable. They are trying to ship out the modules so they no longer belong to Ansible Core and in the future will be a part of Ansible Galaxy. This is due to the large amount of changes and requests on the existing modules. You will moving forward likely install modules on Ansible Galaxy using colections. Ansilbe will know how to find these modules wether they are a part of Core or something you have installed by copying the module into Ansibles library directory
+
+Here we create a library directory relative to our playbook
+
+cd library
+cp ~/napalm-ansible/library/napalm_get_facts .
+
+If you see an error couldnt resolve module/action Ansible did not find the module. 
+
+You can also specify -M to specify the module path
+
+ansible-playbook ios_config1.yml -M ~/napalm-ansible/library/napalm_get_facts
+
+Alternatively you can also add the path to the Ansible Library by setting an env variable
+
+export ANSIBLE_LIBRARY=/home/student/napalm-ansible/library
+
+Kirk's favorite way of accomplishing this is specifying the module location in .ansible.cfg
+
+[defaults]
+inventory = ~/ansible-hosts.ini
+library = ~/napalm-ansible/napalm_ansible/modules:~/ansible-extras/ntc-ansible/library
+
+* Ansible Collections
+
+These are used because it is hard for the Ansible Core project to manage changes to the many modules that are created. So they are moving the core modules to collections to manage the many changes to these modules. The collections are a bundle of Ansible content formatted in a certain way so you can distribute modules and other artifacts. Potentially across time modules will be moved out of Ansible Core and onto Ansible Galaxy. This way you can have Cisco maintain their modules and F5 there own.. etc. Ansible Galaxy galaxy.ansible.com is similar to pypi and you can search for a module you like. The site will give you the command to run to install the module. 
+
+ansible-galaxy collection install clay584.genie
+Process install dependency map
+Starting collection install process
+Installing 'clay584.genie:0.1.8' to '/home/student5/.ansible/collections/ansible_collections/clay584/genie'
+
+In Ansible you cannot import a module that has a name that already exists in the Core modules. As modules continue to be added Ansible has decided to add namespaces to module names. The first part of the name is generally the individual or organizations name. Below it is clay584 but it could be Cisco or Nokia. The second part would be the catagory name that this would be grouped under. The last part of the name is the module name where below we have learn_genie. 
+
+---
+- name: Testing collections
+  hosts: cisco1
+  gather_facts: False
+  tasks:
+    - clay584.genie.learn_genie:
+        host: "{{ ansible_host }}"
+        port: 22
+        protocol: ssh
+        username: "{{ ansible_user }}"
+        password: "{{ ansible_ssh_pass }}"
+        os: ios
+        feature: interface
+      register: output
+
+    - debug:
+        var: output
+
+Here we specify the search order under collections: in the playbook so you tell it the order to search when looking for a module name. When you do this as youll notice in the task section you only have to specify learn_genie
+
+---
+- name: Testing collections
+  hosts: cisco1
+  gather_facts: False
+  collections:
+    - clay584.genie
+
+  tasks:
+    - learn_genie:
+        host: "{{ ansible_host }}"
+        port: 22
+        protocol: ssh
+        username: "{{ ansible_user }}"
+        password: "{{ ansible_ssh_pass }}"
+        os: ios
+        feature: interface
+      register: output
+
+    - debug:
+        var: output
