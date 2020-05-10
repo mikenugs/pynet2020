@@ -1,0 +1,392 @@
+As Ansible playbooks get longer and longer it can be dificult to manage these longer playbooks. You may want to compose your playbooks so they can be reused in other contexts. Some methodes to do this are Imports and Includes
+
+
+* import_tasks, import_playbook, import_role = static
+ - statements are pre-prosessed at the time playbooks are parsed. So if it fails it fails very early.
+
+* include_tasks, include_role, include_vars = dynamic
+ - statements are processes as they are encountered during the execution of the playbook. 
+
+Loops only work with include_tasks. To get around that you can embed the loop in the sub task if you are using import_tasks.
+
+---
+- hosts: local
+  tasks:
+#    - name: Runtime with loop
+#      include_tasks: common_tasks.yml
+#      loop:
+#        - 10.1.1.1
+#        - 10.1.1.2
+#        - 10.1.1.3
+#        - 10.1.1.4
+
+    - name: Import (pre-processed at playbook parsing) - will fail
+      import_tasks: common_tasks.yml
+      # import_tasks: common_tasks_w_loop.yml
+      loop:
+        - 10.1.1.1
+        - 10.1.1.2
+        - 10.1.1.3
+        - 10.1.1.4
+
+!common_tasks.yml
+
+- name: In common_tasks.yml
+  debug:
+    msg: "Variable from loop: {{ item }}"
+
+- debug:
+    msg: Hello world
+
+!common_tasks_w_loop.yml
+
+- name: In common_tasks.yml
+  debug:
+    msg: "Variable from loop: {{ item }}"
+  loop:
+    - 10.1.1.1
+    - 10.1.1.2
+    - 10.1.1.3
+    - 10.1.1.4
+
+- debug:
+    msg: Hello world
+  loop:
+    - 10.1.1.1
+    - 10.1.1.2
+    - 10.1.1.3
+    - 10.1.1.4
+
+Tags - import_tasks = the tag is applied at import_tasks and is propogated to sub tasks
+Tags - include_tasks = the tag controls the actual include_task itself requires tag to exist twice
+
+Below when running import_tasks both plays run. You can also execute a --list-tasks and it will show you which tasks will run. This only runs when using import_tasks. If you run the playbook below with the include_task run it does not execute any of the plays in the subtask that is imported since that did not have any tags that matched. 
+
+---
+- hosts: local
+  tasks:
+    - name: Runtime include
+      include_tasks: common_tasks2.yml
+      tags: foo1
+
+#    - name: Import (pre-processed at playbook parsing)
+#      import_tasks: common_tasks2.yml
+#      tags: foo1
+
+!common_tasks2.yml
+
+- name: In common_tasks2.yml
+  debug:
+    msg: Hello world
+  tags: 
+    - foo2
+
+- name: Second task
+  debug:
+    msg: Hello world2
+
+
+With the below playbook if we run the import_tasks the ip address is changed at the sub task and therefore the second subtask is not executed be the when statement. When you use the include task run it actually prints all the sub tasks. 
+
+---
+- hosts: local
+  vars:
+    ip_address: 172.16.31.1
+  tasks:
+    - name: Runtime include
+      include_tasks: common_tasks3.yml
+      when: 'ip_address == "172.16.31.1"'
+
+#    - name: Import (pre-processed at playbook parsing)
+#      import_tasks: common_tasks3.yml
+#      when: 'ip_address == "172.16.31.1"'
+
+!common_tasks3.yml
+
+- name: Set IP Address to 10.1.1.1
+  set_fact:
+    ip_address: 10.1.1.1
+
+- name: Print IP Address
+  debug:
+    msg: "{{ ip_address }}"
+
+Here we have an example on using include_tasks where we match the OS type and pull the playbook from a directory that has the OS type in path. Notice the Juniper play is seperate indentation it is run as a seperate task because gather_facts does not work for Juniper. 
+
+---
+- name: Global configuration using includes
+  hosts: cisco:arista:nxos
+  gather_facts: True
+  tasks:
+    - name: Include IOS tasks
+      include_tasks: "example_tasks/{{ ansible_facts.net_iostype }}/tasks.yml"
+      when: ansible_facts.net_iostype is defined and 
+            ansible_facts.net_iostype == "IOS"
+
+    - name: Include IOS-XE tasks
+      include_tasks: "example_tasks/{{ ansible_facts.net_iostype }}/tasks.yml"
+      when: ansible_facts.net_iostype is defined and
+            ansible_facts.net_iostype == "IOS-XE"
+
+    - name: Include EOS tasks
+      include_tasks: "example_tasks/{{ ansible_network_os }}/tasks.yml"
+      when: 'ansible_network_os == "eos"'
+
+    - name: Include NX-OS tasks
+      include_tasks: "example_tasks/{{ ansible_network_os }}/tasks.yml"
+      when: 'ansible_network_os == "nxos"'
+
+- name: Global configuration using includes
+  hosts: juniper
+  gather_facts: False
+  tasks:
+    - name: Include Junos tasks
+      include_tasks: "example_tasks/{{ ansible_network_os }}/tasks.yml"
+
+/example_tasks/IOS/tasks.yml
+
+- name: IOS global config
+  ios_config:
+    lines:
+      - "ip name-server {{ dns_server1 }}"
+      - "ip name-server {{ dns_server2 }}"
+      - "ip domain name {{ domain_name }}"
+      - "ntp server {{ ntp_server1 }}"
+      - "ntp server {{ ntp_server2 }}"
+    save_when: changed
+
+
+Here we have the same playbook as above but we consolidate it even more
+
+---
+- name: Global configuration using includes
+  hosts: cisco:arista:nxos
+  gather_facts: True
+  tasks:
+    - name: Include IOS and IOS-XE tasks
+      include_tasks: "example_tasks/{{ ansible_facts.net_iostype }}/tasks.yml"
+      when: ansible_facts.net_iostype is defined
+
+    - name: Include EOS and NX-OS tasks
+      include_tasks: "example_tasks/{{ ansible_network_os }}/tasks.yml"
+      when: 'ansible_network_os in ["eos", "nxos"]'
+
+- name: Global configuration using includes
+  hosts: juniper
+  gather_facts: False
+  tasks:
+    - name: Include Junos tasks
+      include_tasks: "example_tasks/{{ ansible_network_os }}/tasks.yml"
+
+!/example_tasks/eos/tasks.yml
+
+- name: EOS global config
+  eos_config:
+    lines:
+      - "ip name-server {{ dns_server1 }}"
+      - "ip name-server {{ dns_server2 }}"
+      - "ip domain-name {{ domain_name }}"
+      - "ntp server {{ ntp_server1 }}"
+      - "ntp server {{ ntp_server2 }}"
+    save_when: changed
+
+Here we assign all the vars in the file some_vars.yml yo the variable name my_var we then print out the variable we created. 
+
+---
+- name: Load variables from file
+  hosts: local
+  tasks:
+    - name: Load variables from file into my_var
+      include_vars:
+        file: some_vars.yml
+        name: my_var
+
+    - debug:
+       var: my_var
+
+!/some_vars.yml
+---
+key1: val1
+key2: val2
+key3: val3
+
+Here instead of assigning the variables we imported from a file to a new variable name we just read one of the keys. 
+
+---
+- name: Vars from file directly into namespace
+  hosts: local
+  tasks:
+    - name: Include vars from file
+      include_vars: some_vars.yml
+
+    - debug:
+       var: key1
+
+!/some_vars.yml
+---
+key1: val1
+key2: val2
+key3: val3
+
+Here we can also point include_vars to a directory and it will read all of the jaml and json files and read in all those variables. We then stuff all that in a variable called my_var. It will also recurse through the subdirectories.
+
+---
+- name: Load variables from directory of files
+  hosts: local
+  tasks:
+    - name: Recurse directory for variables
+      include_vars:
+        dir: test_dir
+        name: my_var
+
+    - debug:
+       var: my_var
+
+!test_dir/sub_dir/foo3.json
+
+{"hello": "world"}
+
+!/test_dir/foo1.yml
+
+---
+key1: val1
+key2: val2
+key3: val3
+
+!/test_dir/foo2.yml
+
+---
+key4: val4
+key5: val5
+key6: val6
+
+When using Ansible roles you can create a directory called roles and then have several directories underneath that. You can add all of your files such as vars, templates.. etc and also a task folder. When you call upon the role it will look for the main.yml file under tasks when executing the playbook. 
+
+---
+- hosts: cisco1
+  gather_facts: False
+  roles:
+    - core_router
+
+!/core_router/tasks/main.yml
+
+---
+- debug:
+    msg: Hello world xxxxxxxx
+
+
+Here we have an example where our playbook pulls vars from the vars directory
+
+---
+- hosts: cisco1
+  gather_facts: False
+  roles:
+    - core_router2
+
+!/roles/core_router2/tasks/main.yml
+
+---
+- debug:
+    msg: "DNS1: {{ dns_server1 }}"
+
+- debug:
+    msg: "DNS2: {{ dns_server2 }}"
+
+!/roles/core_router2/vars/main.yml
+
+---
+dns_server1: 8.8.8.8
+dns_server2: 8.8.4.4
+
+
+Here we have a playbook the executes a role that uses variables in the var directory and templates them out to create a text file.
+
+---
+- hosts: cisco1
+  gather_facts: False
+  roles:
+    - core_router3
+
+!/roles/core_router3/tasks/main.yml
+
+---
+- template:
+    src: ntp.j2
+    dest: ntp.txt
+
+!/roles/core_router3/templates/ntp.j2
+
+ntp server {{ ntp_server1 }} 
+ntp server {{ ntp_server2 }}
+
+!/roles/core_router3/vars/main.yml
+
+ntp_server1: 130.126.24.24
+ntp_server2: 152.2.21.1
+
+
+Here we have a role that uses a jinja2 template to push configurations to IOS and IOS-XE devices. 
+
+---
+- name: IOS Example
+  hosts: cisco
+  gather_facts: True
+  roles:
+    - core_router4
+
+!/roles/core_router4/tasks/main.yml
+
+- name: Global config
+  ios_config:
+    src: ios_config.j2
+
+- name: First debug task
+  debug:
+    msg: Hello
+
+- name: Second debug task
+  debug:
+    msg: World
+
+!/roles/core_router4/templates/ios_config.j2
+
+ip domain name {{ domain_name }}
+ntp server {{ ntp_server1 }}
+ntp server {{ ntp_server2 }}
+{% if ansible_facts.net_iostype == "IOS" %}
+ip name-server {{ dns_server1 }}
+ip name-server {{ dns_server2 }}
+{% elif ansible_facts.net_iostype == "IOS-XE" %}
+ip name-server {{ dns_server1 }} {{ dns_server2 }}
+{% endif %}
+
+!/roles/core_router4/vars/main.yml
+
+ntp_server1: 130.126.24.24
+ntp_server2: 152.2.21.1
+domain_name: bogus.com
+dns_server1: 8.8.8.8
+dns_server2: 8.8.4.4
+
+You can alternatively use import role or ijnclude role to call upon your roles. 
+
+---
+- name: IOS Example
+  hosts: cisco
+  gather_facts: True
+  tasks:
+    - name: Use newer import_role form
+      import_role:
+        name: core_router4
+      when: True
+      tags: foo1
+
+    - name: Use dynamic instead of static form
+      include_role:
+        name: core_router4
+      when: False
+      tags: foo2
+
+Roles are inherintly a bundle of related items that go together. You can bundle tasks, variables, templates that all go together within a role. The first place ansible will look for roles is in your current directory in a /roles directory. The second place it will look is in your home directory in a .ansible folder under /roles. It will also check under /etc/ansible/roles, /usr/share/ansible/roles. You can also modify your role path in ~/.ansible.cfg using roles_path = ~/path/torole
+
+When you need to reuse playbooks using roles is a great way to centralize these playbooks. Especially when they have files that need to be assicated with them. 
