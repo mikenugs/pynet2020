@@ -1,0 +1,425 @@
+The inventory hostname is to the left of ansible_host so if you print out inventory_hostname you will see arista5
+
+[arista]
+arista5 ansible_host=arista5.lasthop.io
+
+You can print out the inventory hostnames by running a debug on inventory_hostname. You can also get detailed information on the groups in your inventory by running a debug on groups. And to get detailed information on the hosts by doing a debug on hostvars. 
+
+---
+- name: IOS Example
+  hosts: cisco1
+  gather_facts: False
+  tasks:
+    - debug:
+        # var: inventory_hostname
+        # var: groups
+        var: hostvars
+
+
+You can use hostvars to access values that are stored in host_vars for hosts that are not even run when you run the playbook. Below we run our playbook on cisco1 but we return values stored in host_vars for other Cisco hosts.
+
+---
+- name: IOS Example
+  hosts: cisco1
+  gather_facts: True
+  tasks:
+    - debug:
+        var: hostvars
+
+    - debug:
+        msg: "{{ hostvars['cisco5'] }}"
+
+    - debug:
+        msg: 
+          - "Cisco1: {{ hostvars['cisco1']['bgp_router_id'] }}"
+          - "Cisco2: {{ hostvars['cisco2']['bgp_router_id'] }}"
+          - "Cisco5: {{ hostvars['cisco5']['bgp_router_id'] }}"
+          - "Cisco6: {{ hostvars['cisco6']['bgp_router_id'] }}"
+
+!/host_vars/cisco5.yml
+
+---
+bgp_router_id: 172.31.1.5
+
+When using block it will apply the three statements we have specified when, become and become_method to everything within the block. You cannot use loops with blocks
+
+---
+- name: Block Example
+  hosts: cisco:arista:juniper
+  gather_facts: False
+  tasks:
+    - block:
+        - name: Executing command
+          ios_command:
+            commands: show ip int brief
+          register: output
+    
+        - set_fact:
+            show_ip: "{{ output.stdout[0] }}"
+    
+        - debug:
+            msg: "{{ show_ip.splitlines() }}"
+      when: 'ansible_network_os == "ios"' 
+      #become: yes
+      #become_method: enable
+
+
+You can use rescue and this will execute when something fails for your block statement. 
+
+---
+- name: Block Example
+  hosts: cisco:arista:juniper
+  gather_facts: False
+  tasks:
+    - block:
+        - name: Executing command
+          ios_command:
+            commands: show ip int brief
+          register: output
+          failed_when: True
+    
+        - set_fact:
+            show_ip: "{{ output.stdout[0] }}"
+    
+        - debug:
+            msg: "{{ show_ip.splitlines() }}"
+      when: 'ansible_network_os == "ios"'
+      rescue:
+        - debug:
+            msg: "An error happened...I want to do something."
+
+You can use always and this will always execute even if there is a failure in the task.
+
+---
+- name: Block Example
+  hosts: cisco:arista:juniper
+  gather_facts: False
+  tasks:
+    - block:
+        - name: Executing command
+          ios_command:
+            commands: show ip int brief
+          register: output
+          failed_when: True
+    
+        - set_fact:
+            show_ip: "{{ output.stdout[0] }}"
+    
+        - debug:
+            msg: "{{ show_ip.splitlines() }}"
+      when: 'ansible_network_os == "ios"'
+      rescue:
+        - debug:
+            msg: "An error happened...I want to do something."
+      always:
+        - debug:
+            msg: "Always happens..."
+
+In Ansible we typically get a string blob back from devices when running commands. The data is not structured. There are a few ways to solve this.
+
+* Use an API (may not work in Ansible)
+* | json (avoid parsing altogether)
+* Use a Parser (TextFSM/Genie)
+* Use an existing library that does it for you (NAPALM, Ansible Resource Modules/Facts)
+* Regex or other custom processing
+
+When using show version without | json you will get a single sting back. Since Arista supports parsing this to json we can use the | json command to get back structured data. With the below playbook we use | json to get structured data back and we then parse through the output to display only the data we are interested in. 
+
+
+---
+- name: Alternate form controlling output format
+  hosts: arista5
+  gather_facts: False
+  tasks:
+    - name: Executing command
+      eos_command:
+        commands:
+          - command: show version
+            output: json
+      register: output
+
+    - set_fact:
+        show_ver: "{{ output['stdout'][0] }}"
+
+    - debug:
+        msg: "OS Version: {{ show_ver.version }}"
+
+Here is another example using the Nexus show version
+
+
+---
+- name: Pipe JSON NX-OS
+  hosts: nxos1
+  gather_facts: False
+  tasks:
+    - name: Executing command
+      nxos_command:
+        commands: show version | json
+      register: output
+
+    - set_fact:
+        show_ver: "{{ output['stdout'][0] }}"
+
+    - debug:
+        msg: "Platform: {{ show_ver.chassis_id }}"
+
+TextFSM is another parser that can help us go from unstructured data to structured data. There are many templates that have already been written for us by NTC. TextFSM couples a state maching with Regex. 
+
+To see which templates you have available
+
+ls -al ~/ntc-templates/templates
+
+You can see below where we reference a template for the command show ip interface brief and give it a variable name. 
+
+---
+- name: TextFSM Example
+  hosts: cisco5
+  gather_facts: False
+  vars:
+    fsm_template: "cisco_ios_show_ip_interface_brief.template"
+
+  tasks:
+    - name: Executing command
+      ios_command:
+        commands: show ip int brief
+      register: output
+
+    - set_fact:
+        show_ip: "{{ output.stdout[0] | parse_cli_textfsm(fsm_template) }}"
+
+    - debug:
+        var: show_ip
+
+    - debug:
+        msg: "{{ item['INTF'] }}"
+      loop: "{{ show_ip }}"
+
+In this example we have to add the ansible-network.network-engine role. This can be installed via git clone, or via Ansible Galaxy. We reference output.stdout[0] so we can strip out the outer Ansible header information. 
+
+---
+- name: TextFSM Example2
+  hosts: cisco5
+  gather_facts: False
+  vars:
+    fsm_template: "cisco_ios_show_ip_interface_brief.template"
+
+  roles:
+    - ansible-network.network-engine
+
+  tasks:
+    - name: Executing command
+      ios_command:
+        commands: show ip int brief
+      register: output
+
+    - set_fact:
+        show_ip: "{{ output.stdout[0] }}"
+
+    - name: TextFSM test
+      textfsm_parser:
+        file: "{{ fsm_template }}"
+        content: "{{ show_ip }}"
+        name: show_ip_parsed
+
+    - debug:
+        var: show_ip_parsed
+
+In this example we set a variable that does not point to a textfsm file but rather a textFSM index. This file is a mapping between platform/command and the template it should use for that. We then feed it into another filter called ntc_parse with the command the platform and the index file that we specify as a variable. You will have to setup your filter pluging in ~/.ansible.cfg for this method. 
+
+filter_plugins = ~/ansible-extras/ntc-ansible/filter_plugins
+
+
+---
+- name: TextFSM Example3
+  hosts: cisco5
+  gather_facts: True
+  vars:
+    platform: "cisco_ios"
+    command: "show ip int brief"
+    textfsm_rel_path: "ntc-templates/templates/"
+
+  tasks:
+    - name: Executing command
+      ios_command:
+        commands: "{{ command }}"
+      register: output
+
+    - debug:
+        var: output
+
+    # This is only needed so our automated tests work properly
+    - name: "Set home directory as ntc_parse doesn't understand ~"
+      set_fact:
+        textfsm_index: "{{ inventory_dir }}/{{textfsm_rel_path }}"
+
+    - set_fact:
+       show_ip: "{{ output.stdout[0] | ntc_parse(command, platform, textfsm_index ) }}"
+
+    - debug:
+        var: show_ip
+
+Cisco also has a library called Genie which can be used to get structured data back from Cisco products. Here we used Ansible Galaxy to install clay584.genie. To see which commands work you will need to check with the documentation or use trail and error. You need to specify the FQ Name Space clay584.genie.parse_genie at this time and not just parse_genie. 
+
+
+---
+- hosts: cisco5
+  gather_facts: false
+  vars:
+    command: show ip interface brief
+    # command: show version
+  collections:
+   - clay584.genie
+
+  tasks:
+
+    - name: Executing command
+      ios_command:
+        commands: "{{ command }}"
+      register: output
+
+    - debug:
+        var: output
+
+    - set_fact:
+        output_struct: "{{ output.stdout[0] | clay584.genie.parse_genie(command=command, os='iosxe') }}"
+
+    - debug:
+        msg: "{{ output_struct }}"
+
+RegEx can be used as well to create structured data. 
+
+Below we strip out the first header line of show ip interface brief with the set_fact for show_ip
+
+We then do a splitlines on that variable and send it to another filter regex_findall. The first field we pass into findall is a RegEx pattern. We need to use \\ to have it properly indicate this is RegEx. The multiline=True is used for anchoring it can anchor on the beginning of each and every line so it does that. With the debig command what we do is loop through each item in our list that we got back and we skip over any line with a print that has unassigned int he second colomn so it only prints the interfaces with IP addresses. 
+
+
+---
+- name: RegEx Example1
+  hosts: cisco5
+  gather_facts: False
+
+  tasks:
+    - name: Executing command
+      ios_command:
+        commands: show ip int brief
+      register: output
+
+    - set_fact:
+        output: "{{ output.stdout[0] }}"
+
+    - name: Strip header information
+      set_fact:
+        show_ip: "{{ output | regex_replace('Interface.*Protocol') | trim }}"
+
+    - debug: 
+        msg: "{{ show_ip.splitlines() }}"
+
+    - name: Extract interface and IP columns
+      set_fact:
+        show_ip_list: "{{ show_ip | regex_findall('^(\\S+)\\s+(\\S+)', multiline=True) }}"
+
+    - name: Show interfaces with IP addresses
+      debug:
+        msg: "{{ item }}"
+      loop: "{{ show_ip_list }}"
+      when: "item[1] != 'unassigned'"
+
+Here we look at the regex search feature. Here we loop over the show_ip variable which we used splitlines to create a list on each line. We then run that through the regex search pattern. regex search is patterned after pythons re.search. 
+
+---
+- name: RegEx Example2
+  hosts: cisco5
+  gather_facts: False
+
+  tasks:
+    - name: Executing command
+      ios_command:
+        commands: show ip int brief
+      register: output
+
+    - set_fact:
+        output: "{{ output.stdout[0] }}"
+
+    - name: Strip header information
+      set_fact:
+        show_ip: "{{ output | regex_replace('Interface.*Protocol') | trim }}"
+
+    - name: Extract interface name
+      debug:
+        msg: "{{ item | regex_search('^\\S+') }}"
+      loop: "{{ show_ip.splitlines() }}"
+      loop_control:
+        label: ""
+
+Previously we used the regex search to match on a pattern. We now will capture something using paranthesis. We are trying to capture the serial number by first searching on the Processor Board which comes before it. The \\1 indicates that we want what is in our first parenthesis. The second example does the same thing but gives us the ability to have named groups to search on serial_num. 
+
+---
+- name: RegEx Example3
+  hosts: cisco5
+  gather_facts: False
+
+  tasks:
+    - name: Executing command
+      ios_command:
+        commands: show version
+      register: output
+
+    - set_fact:
+        output: "{{ output.stdout[0] }}"
+
+    - debug:
+        msg: "{{ output.splitlines() }}"
+
+    - name: Show Version (return capture group1)
+      debug:
+        msg: "{{ output | regex_search('^Processor board ID (\\S+).*$', '\\1', multiline=True) }}"
+
+    - name: Show Version (return capture group-named)
+      debug:
+        msg: "{{ output | regex_search('^Processor board ID (?P<serial_num>\\S+).*$', '\\g<serial_num>', multiline=True) }}"
+
+With static inventory you can store your host information in 
+
+* ansible-hosts.ini
+* host_vars/cisco1.yml
+* host_vars/cisco1/bgp.yml
+* group_vars/cisco.yml
+* group_vars/cisco/vlans.yml
+
+If you have hundreds or thousands of devices or you have an external DCIM, IPAM or other database you will want a way to pull this inventory and dynamically create an inventory.
+
+External Database -> Script pulls information -> script presents that info to Ansible in a particular form
+
+We have a script that can dynamically import these variables and has the following options
+
+* Yields all the groups in inventory, group variables and the hosts assiciated with the groups
+
+./dyn_inv.py --list
+
+* This will yield all of the host specific variables for the host
+
+./dyn_inv.py --host arista5
+
+* You can view the inventory to Ansible using
+
+ansible-inventory --list -i ./dyn_inv.py
+
+* To see in a graphical format
+
+ansible-inventory --graph -i ./dyn_inv.py
+
+* To feed the inventory to your playbook
+
+ansible-playbook vlans_eos.yml -i ./dyn_inv.py
+
+* If you need to manuelly put in a password
+
+ansible-playbook vlans_eos.yml -i ./dyn_inv.py -k
+
+In Ansible you can also create a directory called my_inventory where you can store both static inventory files like ansible-hosts and dynamic ones like dyn_inv.py. You can then point your playbook to the directory. Ansible will search both the dynamic and the static inventory in the directory.
+
+ansible-playbook test_pb.yml -i /my_inventory/
+
+If you need to feed it your password
+
+ansible-playbook test_pb.yml -i /my_inventory/ -k
