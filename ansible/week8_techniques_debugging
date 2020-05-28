@@ -1,0 +1,532 @@
+Ansible lookups can be used to retrieve information from some sort of external source from the system. Some of the most common ones we will use are file lookup and template lookup. 
+
+In the below example we do a file lookup on my_file.txt and save it as a variable called file_content. 
+
+We then do a splitlines on it and print it out. 
+
+We then do a jinja2 template lookup on the file my_template.j2 which prints the inventory hostname. The jinja2 template reads in the file and processes it appropriately. 
+
+Lastly we do a lookup at our environmental variables and print out what we have stored for ANSIBLE_PASSWORD at the system level. To see what environmental variables are set that Ansible can pull in this manner you can do a env
+
+
+---
+- name: Test lookups
+  hosts: local
+  vars:
+    file_content: "{{ lookup('file', 'my_file.txt') }}"
+  tasks:
+    - debug:
+        var: file_content.splitlines()
+
+    - name: show templating results
+      debug:
+        msg: "{{ lookup('template', './my_template.j2') }}"
+
+    - name: Environment variable
+      debug:
+        msg: "{{ lookup('env', 'ANSIBLE_PASSWORD') }}"
+
+!my_file.txt
+
+some file
+with 
+things in
+it.
+
+!my_template.j2
+
+{{ inventory_hostname }}
+{{ inventory_hostname }}
+{{ inventory_hostname }}
+{{ inventory_hostname }}
+{{ inventory_hostname }}
+{{ inventory_hostname }}
+
+Ansible has a large amount of filters that can be leveraged which you can find here
+
+https://docs.ansible.com/ansible/latest/user_guide/playbooks_filters.html
+
+The first filter we have an integer then a pipe and then the integer filter called int. The Ansible when statement already assumes a jinja2 context so we do not have to put curly braces. 
+
+Next we create a dictionary called my_dict. Looking at the filter what we are doing is taking the dictionary name on the left we then add a pipe | and the filter to the right. The first one prints it out to YAML and the second to JSON.
+
+Next we do a lookup on a file ipaddresses.yml. When we do a lookup we | from_yaml to it saves it to the variable as YAML. We then print out just the IP address for la in the next task. 
+
+The next lookup is simlar but we save it as locations in the json format by using the pipe from_json. We then print out just the IP address for Seattle. 
+
+Next we show how we can do a debug looking for a variable and if it exists it will pring the variable. If it does not exist we specify a default value called Hello to print.
+
+
+With the last task we use touch to create a file using a list of file names. When the list element is named mode it will skip making a file for that name. 
+
+---
+- name: Test lookups
+  hosts: local
+  vars:
+    number: "22"
+    my_dict:
+      key1: val1
+      key2: val2
+      key3: val3
+      key4: val4
+
+  tasks:
+    - debug:
+        var: number
+      when: number | int == 22
+
+    - debug:
+        msg: "{{ my_dict | to_nice_yaml(indent=4) }}"
+
+    - debug:
+        msg: "{{ my_dict | to_nice_json(indent=4) }}"
+
+    - set_fact:
+        data: "{{ lookup('file', 'ip_addresses.yml') | from_yaml }}"
+
+    - debug:
+        var: data.ip_addresses.la
+
+    - set_fact:
+        locations: "{{ lookup('file', 'locations.json') | from_json }}"
+
+    - debug:
+        var: locations["seattle"]
+
+    - name: Default value
+      debug:
+        msg: "{{ unknown_var | default('Hello') }}"
+
+    - name: touch files with an optional mode
+      file:
+        dest: "{{ item.path }}"
+        state: touch
+        mode: "{{ item.mode | default(omit) }}"
+      loop:
+        - path: foo.txt
+        - path: bar.txt
+        - path: baz.txt
+          mode: "0444"
+
+!ip_addresses.yml
+
+---
+ip_addresses:
+  sf: 1.1.1.1
+  ny: 2.2.2.2
+  la: 3.3.3.3
+  den: 4.4.4.4
+
+!locations.json
+{
+    "ny": "10.1.1.1",
+    "sf": "10.1.1.2",
+    "la": "10.1.1.3",
+    "seattle": "10.1.1.4",
+    "phoenix": "10.1.1.5"
+}
+
+Here we look at sets and unions, Intersections and Differences. Unions can combine two different sets and remove anything overlapping. Intersections will show you what is the same in two sets. Differences will show you what is different between the sets. There is also a Symmetric difference which shows things that are not common between the two. 
+
+The first task does a list concatation where we add the IP addresses from both lists creating one list called dns_servers with all the elements from both lists.
+
+The next task will filter out any duplicates in the list showing only whats unique.
+
+The next operation with the union should add both lists and remove any duplicates.
+
+The next task will show what dns servers are common between the two lists with the intersection. 
+
+We then do a difference between the two which should remove the 8. DNS servers.
+
+The last one gives you the unique ones in SF and unique in LA.
+
+---
+
+- name: Test lookups
+  hosts: local
+  vars:
+    sf_dns:
+      - 8.8.8.8
+      - 8.8.4.4
+      - 1.1.1.1
+      - 1.0.0.1
+    la_dns:
+      - 8.8.8.8
+      - 8.8.4.4
+      - 4.4.2.2
+
+  tasks:
+    - set_fact:
+        dns_servers: "{{ sf_dns + la_dns }}"
+
+    - name: Unique elements
+      debug:
+        msg: "{{ dns_servers | unique }}"
+
+    - name: Set operations union
+      debug:
+        msg: "{{ sf_dns | union(la_dns) }}"
+
+    - name: Set operations intersection
+      debug:
+        msg: "{{ sf_dns | intersect(la_dns) }}"
+
+    - name: Set operations difference 
+      debug:
+        msg: "{{ sf_dns | difference(la_dns) }}"
+
+    - name: Set operations symmetric difference 
+      debug:
+        msg: "{{ sf_dns | symmetric_difference(la_dns) }}"
+
+(py3_venv) [mikenoc@anslab9a week8]$ ansible-playbook test.yml 
+
+PLAY [Test lookups] ***************************************************************************
+
+TASK [Gathering Facts] ************************************************************************
+ok: [localhost]
+
+TASK [set_fact] *******************************************************************************
+ok: [localhost]
+
+TASK [Unique elements] ************************************************************************
+ok: [localhost] => {
+    "msg": [
+        "8.8.8.8",
+        "8.8.4.4",
+        "1.1.1.1",
+        "1.0.0.1",
+        "4.4.2.2"
+    ]
+}
+
+TASK [Set operations union] *******************************************************************
+ok: [localhost] => {
+    "msg": [
+        "8.8.8.8",
+        "8.8.4.4",
+        "1.1.1.1",
+        "1.0.0.1",
+        "4.4.2.2"
+    ]
+}
+
+TASK [Set operations intersection] ************************************************************
+ok: [localhost] => {
+    "msg": [
+        "8.8.8.8",
+        "8.8.4.4"
+    ]
+}
+
+TASK [Set operations difference] **************************************************************
+ok: [localhost] => {
+    "msg": [
+        "1.1.1.1",
+        "1.0.0.1"
+    ]
+}
+
+TASK [Set operations symmetric difference] ****************************************************
+ok: [localhost] => {
+    "msg": [
+        "1.1.1.1",
+        "1.0.0.1",
+        "4.4.2.2"
+    ]
+}
+
+PLAY RECAP ************************************************************************************
+localhost                  : ok=7    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+
+(py3_venv) [mikenoc@anslab9a week8]$ 
+
+We next use a template for performing a show ip interface brief and execute that against cisco5. The data is returned back to us as structured data. We then use the map feature and pipe that against our variable name called show_ip. We then add another jinja2 filter called list since the outermost structure is a list it will print it out once by one. 
+
+---
+
+- name: Test lookups
+  hosts: cisco5
+  gather_facts: False
+  vars:
+    fsm_template: "cisco_ios_show_ip_interface_brief.template"
+
+  tasks:
+    - name: Executing command
+      ios_command:
+        commands: show ip int brief
+      register: output
+
+    - set_fact:
+        show_ip: "{{ output.stdout[0] | parse_cli_textfsm(fsm_template) }}"
+
+    - debug:
+        msg: "{{ show_ip }}"
+
+    - debug:
+#        msg: "{{ show_ip  | map(attribute='IPADDR') | list }}"
+        msg: "{{ show_ip  | map(attribute='INTF') | list }}"
+
+Plugins are software components that can be added in a modular way. Ansible is now catagorizing modules as plugins. You can find a list of plugins at the below site. One plugin that you may find useful is callback plugin which can change the output when you run a playbook. 
+
+https://docs.ansible.com/ansible/latest/plugins/plugins.html
+
+To enable you can edit
+
+nano ~/ansible.cfg
+
+Then set the below to have a very brief output
+
+stdout_callback = selective
+
+The below will again give you a more brief output
+
+stdout_callback = actionable
+
+You can also set to a more verbose method of showing output when running a playbook using the below command.
+
+stdout_callback = debug
+
+
+In Ansible when you have a data structure of one form and would like to change it to a data structure in another form this can be a difficult task.  In the below playbook we use TextFSM to parse a show ip interface brief. This gives us back a list of dictionaries. Here we use the map function to extract the IPADDR and the INTF field by extracting those keys value pairs. We then pipe that to list so it gives us back that info in a list. We not want to create a new data strucure called new_struct that is a list of lists containing the interface name and IP address. The last task creates a new dictionary called ip_dict and uses the dict filter to automatically create key / value pairs of the interface and IP address. 
+
+---
+
+- name: Data Structure Conversion
+  hosts: cisco5
+  gather_facts: False
+  vars:
+    fsm_template: "cisco_ios_show_ip_interface_brief.template"
+
+  tasks:
+    - name: Executing command
+      ios_command:
+        commands: show ip int brief
+      register: output
+
+    - name: TextFSM conversion
+      set_fact:
+        show_ip: "{{ output.stdout[0] | parse_cli_textfsm(fsm_template) }}"
+
+    - debug:
+        msg: "{{ show_ip }}"
+
+    - name: Use map to create equal length lists
+      set_fact:
+        ip_addr: "{{ show_ip  | map(attribute='IPADDR') | list }}"
+        interfaces: "{{ show_ip  | map(attribute='INTF') | list }}"
+
+    - debug:
+        var: ip_addr
+
+    - name: Create list of lists using zip
+      set_fact:
+        new_struct: "{{ interfaces | zip(ip_addr) | list }}"
+
+    - debug:
+        var: new_struct
+
+    - name: Create a dictionary with intf_name as the key
+      set_fact:
+        ip_dict: "{{ dict(new_struct) }}"
+
+    - debug:
+        var: ip_dict
+
+
+In this example we use Napalm to get structured data back and it comes back to us in a variable called napalm_arp_table. This data list a list of dictionaries. We not want to parse through this data and create a new list of dictionaries using the IP address as the Key and the MAC address as the value. We use the map filter to extract the IP address and save it as the key ip_addr and extract the MAC address and save that under the key mac. We then use zip to take values associated with the new keys we created and creat a new list. We then use dict to create a dictionary of those new key value pairs. 
+
+  ---
+- name: NAPALM data structure conversion
+  hosts: cisco1
+  tasks:
+    - name: Gather NAPALM facts
+      vars:
+        ansible_connection: local
+      napalm_get_facts: 
+        filter: "arp_table"
+
+    - debug:
+        var: napalm_arp_table
+
+    - name: Extract ip and mac fields into lists
+      set_fact:
+        ip_addr: "{{ napalm_arp_table | map(attribute='ip') | list }}"
+        mac: "{{ napalm_arp_table | map(attribute='mac') | list }}"
+
+    - debug:
+        var: mac
+
+    - name: Create list of lists using zip
+      set_fact:
+        ip_dict: "{{ ip_addr | zip(mac) | list }}"
+
+    - debug:
+        var: ip_dict
+
+    - name: Create dict from list of lists
+      debug:
+        msg: "{{ dict(ip_dict) }}"
+
+You can also use zip and combine. When we set fact and use ip_dict it is not currently created so we | default {} so it has a default value. We then | combine item[0] which is the interface and item[1] which is the ip address. We loop through new_struct which is where we created this list previously. 
+
+---
+
+- name: Create dictionary using combine
+  hosts: cisco5
+  gather_facts: False
+  vars:
+    fsm_template: "cisco_ios_show_ip_interface_brief.template"
+
+  tasks:
+    - name: Executing command
+      ios_command:
+        commands: show ip int brief
+      register: output
+
+    - name: Parse with TextFSM
+      set_fact:
+        show_ip: "{{ output.stdout[0] | parse_cli_textfsm(fsm_template) }}"
+
+    - name: Extract two lists from returned data
+      set_fact:
+        ip_addr: "{{ show_ip  | map(attribute='IPADDR') | list }}"
+        interfaces: "{{ show_ip  | map(attribute='INTF') | list }}"
+
+    - name: Create list of lists using zip
+      set_fact:
+        new_struct: "{{ interfaces | zip(ip_addr) | list }}"
+
+    - name: Create a dictionary with intf_name as the key
+      set_fact:
+        ip_dict: "{{ ip_dict | default({}) | combine({item[0]: item[1]}) }}"
+      loop: "{{ new_struct }}"
+
+    - debug:
+        var: ip_dict
+
+We loop over out list variable called show_ip each time through the loop item will have the inner dictionary. Here we create a dictionary called ip_dict where the interface name is the key and the IP address is the value. ip_dict is created as an empty dictionary and each time through the loop it adds the items. 
+
+---
+
+- name: Textfsm and combine
+  hosts: cisco
+  gather_facts: False
+  vars:
+    fsm_template: "cisco_ios_show_ip_interface_brief.template"
+
+  tasks:
+    - name: Executing command
+      ios_command:
+        commands: show ip int brief
+      register: output
+
+    - name: Processing with textfsm
+      set_fact:
+        show_ip: "{{ output.stdout[0] | parse_cli_textfsm(fsm_template) }}"
+
+    - name: Create a dictionary with intf_name as the key
+      set_fact:
+        ip_dict: "{{ ip_dict | default({}) | combine({item['INTF']: item['IPADDR']}) }}"
+      loop: "{{ show_ip }}"
+
+    - debug:
+        var: ip_dict
+
+Here is an example where we do list concatanation. 
+
+---
+
+- name: List concatenation
+  hosts: cisco
+  gather_facts: False
+  vars:
+    fsm_template: "cisco_ios_show_ip_interface_brief.template"
+
+  tasks:
+    - name: Executing 'show ip int brief' command
+      ios_command:
+        commands: show ip int brief
+      register: output
+
+    - name: Parse with textfsm
+      set_fact:
+        show_ip: "{{ output.stdout[0] | parse_cli_textfsm(fsm_template) }}"
+
+    - name: Create a list of interfaces
+      set_fact:
+        intf_list: "{{ intf_list | default([]) + [item['INTF']] }}"
+      loop: "{{ show_ip }}"
+
+    - debug:
+        var: intf_list
+
+
+Troubleshooting and Debugging in Ansible is very difficult. 
+
+Step 1. Read the error message you get from Ansible and assume it is true
+Step 2. If your YAML written correctly you can try YAML linters for this
+Step 3. Remember your Jinja2 escapting rules with qoute and double curly braces.
+Step 4. Try adding -vvv to get verbose information
+Step 5. Simplify your problem
+Step 6. Use debug and set_fact to better understand what is happening in your playbook.
+Step 7. When working with network devices the Playbook runs and ships the python module to the controller itself so it is run locally, this is unlike Linux machines where you ship the Python package to the remote maching and it is run remotely and the results are shipped back to you. This is why we run connection local/network_cli
+Step 8. Ansible inherently expects to ship Python to a remote machine which will run it and if those are running two different versions of Python it can cause an error. You can resolve this by hardcoding your version of Python to be the version in the virtual environment that you want it to be
+Step 9. Look into using --step, --list-tasks, -start-at-task
+Step 10. Do not overcomplicate your Jinja2
+Step 11. Look for the error messages that come back from the device such as invalid command
+Step 12. Use stdout_callback = debug to make the output more easy to read.
+
+
+When hard coding the Python interpereter this may cause issues in Linux where the Python package is being shipped to another device. In that case you may want to specify the Python interpereter in more specific groups for networking devices.
+
+nano ~/ansible-hosts.ini
+[all:vars]
+ansible_python_interpreter=/home/mikenoc/VENV/ansible/bin/python
+
+Ansible Vault can be used to store usernames and password for running playbooks. You will first want to take the username and password out of the ansible-hosts.ini. You will then create the following file
+
+!/group_vars/cisco/creds.yml
+---
+ansible_user:pyclass
+ansible_ssh_pass:88newclass
+
+You will then want to encrypt the file it will promot you for a vault password which you will want to remember.
+
+ansible-vault encrypt creds.yml
+
+When you re-run your playbook next you will want to run it like
+
+ansible-playbook playbook1.yml -i ./ansible-hosts.ini --ask-vault-pass
+
+If you want to view the encrypted file you can do
+
+ansible-vault view creds.yml
+
+You can also create an ansible-vault encrypted file by using the command
+
+ansible-vault create new-file.yml
+
+If you want to permenantly decrypt a file you can do
+
+ansible-vault decrypt creds.yml
+
+You can also specify the location of the vault password in ansible.cfg
+
+[defaults]
+vault_password_file = ~/.myvault
+
+You can also encryt strings in your playbook
+
+ansible-vault encrypt_string 'NEWPASS' --name 'ansible_ssh_pass'
+
+You then copy the string it creates and add it to the appropriate place in the playbook.
+
+
+Here is a summary of the commands
+
+ ansible-vault create new.yml
+ ansible-vault edit new.yml
+ ansible-vault encrypt creds.yml 
+ ansible-vault decrypt creds.yml 
+ ansible-vault view creds.yml 
