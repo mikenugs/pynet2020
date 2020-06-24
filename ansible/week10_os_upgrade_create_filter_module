@@ -242,7 +242,6 @@ extra_space: 10000000
 
 !upgrade_os.yml
 
-
 ---
 - name: OS Upgrade on Cisco IOS-XE devices
   hosts: do_not_run_this_playbook
@@ -253,3 +252,220 @@ extra_space: 10000000
     - transfer_image
     - upgrade_device
     - upgrade_post_process
+
+* Making your own Ansible Python filter
+
+You will want to first create a filter_plugins directory relative to where you execute your playbook. This is where you will store your Python scripts. You will have to have specific boiler plates of a class called FilterModule and define filters under that. 
+
+!/filter_plugins/my_filter.py
+
+def some_filter(my_string):
+    return my_string.upper()
+
+
+class FilterModule(object):
+    def filters(self):
+        return {"some_filter": some_filter}
+
+!/filter_plugins/my_filter2.py
+
+def another_filter(my_string, arg1, arg2):
+    return f"{my_string}...{arg1}...{arg2}"
+
+class FilterModule(object):
+    def filters(self):
+        return {"another_filter": another_filter}
+
+
+!Here we have a Playbook that will leverage the Python script we created. 
+
+!my_pb.yml
+
+---
+- hosts: local
+  tasks:
+    - debug:
+        msg: "{{ 'Hello world' | some_filter }}"
+    
+    - debug:
+        msg: "{{ 'Hello world' | another_filter('well', 'actually') }}"
+
+
+
+* Here is another example that retrieves a show ip interface brief from a device
+
+!/filter_plugins/show_ip_int_br.py
+
+"""
+Interface              IP-Address      OK? Method Status                Protocol
+GigabitEthernet1       10.0.2.15       YES DHCP   up                    up
+GigabitEthernet2       unassigned      YES unset  up                    up
+GigabitEthernet3       unassigned      YES unset  up                    up
+GigabitEthernet4       unassigned      YES unset  up                    up
+GigabitEthernet5       unassigned      YES unset  up                    up
+GigabitEthernet6       unassigned      YES unset  up                    up
+GigabitEthernet7       unassigned      YES unset  up                    up
+"""
+import re
+
+
+def show_ip(output):
+    show_version_list = []
+    output = output.strip()
+    for line in output.splitlines():
+        if re.search(r"^Interface.*Protocol$", line, flags=re.M):
+            continue
+        show_version_list.append(line.split())
+    return show_version_list
+
+
+class FilterModule(object):
+    def filters(self):
+        return {"show_ip_filter": show_ip}
+
+
+!/filters/show_ip_int_br.yml
+
+---
+- name: Show IP Int Brief
+  hosts: cisco5
+  gather_facts: False
+
+  tasks:
+    - name: Executing command
+      ios_command:
+        commands: show ip int brief
+      register: output
+
+    # I mislabeled this variable 'show_ver' in the video
+    - set_fact:
+        show_ip: "{{ output.stdout[0] }}"
+
+    - debug:
+        msg: "{{ show_ip | show_ip_filter }}"
+
+
+ * You can also add the python scripts you create in a role and add the filter_plugins directory to that path
+
+ !/roles/my_role/filter_plugins/my_filter.py
+
+ !/filters_role/roles/my_role/tasks/main.yml
+
+ - debug:
+    msg: "{{ 'Hello world' | some_filter }}"
+
+- debug:
+    msg: "{{ 'Hello world' | another_filter('well', 'actually') }}"
+
+ !/test_filters.yml
+
+ ---
+- hosts: local
+  roles:
+    - my_role
+
+* Creating your own Ansible Module
+
+
+!/library/test_module.py
+
+
+def main():
+
+    # Define your modules arguments
+    module_args = dict(
+        name=dict(type="str", required=True),
+        new=dict(type="bool", required=False, default=False),
+    )
+
+    # Create an instance of the AnsibleModule class
+    module = AnsibleModule(argument_spec=module_args, supports_check_mode=True)
+
+    # Define standard results
+    result = dict(changed=False, original_message="Something", message="It worked!!!")
+
+    # Return items as JSON
+    module.exit_json(**result)
+
+
+if __name__ == "__main__":
+    main()
+
+!test1.yml
+
+---
+- name: Testing a new module
+  hosts: local
+  tasks:
+    - name: Test my module
+      test_module:
+        name: Hello
+        new: True
+
+* Here we have an example of creating a module that will use Netmiko to perform a send command to a device
+
+!/library/netmiko_send_command.py
+
+#!/usr/bin/python
+
+from ansible.module_utils.basic import AnsibleModule
+
+netmiko_found = False
+try:
+    from netmiko import ConnectHandler
+
+    netmiko_found = True
+except ImportError:
+    pass
+
+
+def main():
+    # Define your module arguments
+    module_args = dict(
+        host=dict(type="str", required=True),
+        device_type=dict(type="str", required=True),
+        username=dict(type="str", required=False),
+        password=dict(type="str", required=False, no_log=True),
+        command=dict(type="str", required=True),
+    )
+
+    # Create an instance of AnsibleModule class
+    module = AnsibleModule(argument_spec=module_args)
+    result = dict(changed=False, msg="")
+
+    # Ensure Netmiko is installed; exit using JSON (if not).
+    if not netmiko_found:
+        module.fail_json(msg="The Netmiko library is not installed!")
+
+    # Extract the arguments
+    host = module.params["host"]
+    device_type = module.params["device_type"]
+    username = module.params["username"]
+    password = module.params["password"]
+    command = module.params["command"]
+
+    net_connect = ConnectHandler(
+        host=host, device_type=device_type, username=username, password=password
+    )
+    output = net_connect.send_command(command)
+    result["msg"] = output
+    module.exit_json(**result)
+
+
+if __name__ == "__main__":
+    main()
+
+!/test_netmiko.yml
+
+---
+- name: Netmiko module
+  hosts: cisco
+  gather_facts: False
+  tasks:
+    - name: Netmiko testing
+      netmiko_send_command:
+        host: "{{ ansible_host }}"
+        device_type: cisco_ios
+        username: "{{ ansible_user }}"
+        password: "{{ ansible_ssh_pass }}"
+        command: show ip int brief
