@@ -1,0 +1,255 @@
+
+* OS Upgrade
+
+The below playbook can be used to transfer a routers OS version to a device for an OS upgrade. 
+
+---
+- name: Transfer image file
+  hosts: do_not_run_this_playbook
+  tasks:
+    - debug:
+        var: ansible_facts
+      when: ansible_facts.net_model == "C1111-4P"
+
+    - debug:
+        msg: "bootflash:/{{ os_image_file }}"
+
+    - name: Transfer image file
+      vars:
+        # Hopefully 6 hours is enough
+        ansible_command_timeout: 21600
+      net_put:
+        src: "{{ os_image_file }}"
+        dest: "bootflash:/{{ os_image_file }}"
+        protocol: scp
+      when: ansible_facts.net_model == "C1111-4
+
+When you transfer an image you need to care about certain things such as is there enough disk space available. You will want to verify things like the MD5 hash and wether of not the image has been transfered. 
+
+Here we use roles to perform the transfer
+
+!/roles/transfer_image/tasks/main.yml
+
+- name: Determine file-system to use.
+  import_tasks: determine_filesystem.yml
+
+- name: Verify sufficient space available on remote device.
+  import_tasks: verify_space_available.yml
+
+- name: Transfer the image file.
+  import_tasks: transfer_image.yml
+  tags: never
+
+- name: Verify the remote files MD5
+  import_tasks: verify_file.yml
+  tags: md5
+
+!/roles/transfer_image/tasks/determine_filesystem.yml
+
+- name: Select the file-system to use.
+  set_fact:
+    dest_filesystem: "{{ ansible_facts.net_filesystems[0] }}"
+
+- name: Display the file-system selected.
+  debug:
+    var: dest_filesystem
+
+- name: Verify file_system is allowed.
+  assert:
+    that:
+      - dest_filesystem in allowed_filesystems
+    success_msg: "Using file-system: {{ dest_filesystem }}"
+
+!/roles/transfer_image/tasks/transfer_image.yml
+
+- name: Destination PATH
+  debug:
+    msg: "{{ dest_filesystem }}/{{ primary_image.name }}"
+
+- name: Transfer image file
+  vars:
+    # Transfer takes forever and a half
+    ansible_command_timeout: 21600
+  net_put:
+    src: "{{ primary_image.name }}"
+    dest: "{{ dest_filesystem }}/{{ primary_image.name }}"
+    protocol: scp
+  when: ansible_facts.net_model == "C1111-4P"
+
+!/roles/transfer_image/tasks/verify_file.yml
+
+- name: Perform MD5 (returns 'md5_hash' variable)
+  import_role:
+    name: file_operations
+    tasks_from: md5
+
+- name: Verify remote MD5 is correct
+  assert:
+    that:
+      - md5_hash == primary_image.md5
+    fail_msg: "MD5-hash on remote device is not correct {{ md5_hash }} != {{ primary_image.md5 }}"
+    success_msg: "MD5-hash on remote device is correct!"
+
+!/roles/transfer_image/tasks/verify_space_available.yml
+
+- name: Retrieve space available in bytes (returns 'available_space' variable)
+  import_role:
+    name: file_operations
+    tasks_from: available_space
+
+- name: Verify sufficent space on device to store image file.
+  assert:
+    that:
+      - available_space | int > primary_image.size + extra_space
+    success_msg: "{{ dest_filesystem }} has sufficient space for image file."
+
+
+!/roles/transfer_image/vars/main.yml
+
+image_details:
+  name: c1100-universalk9_ias.16.12.03.SPA.bin
+  size: 542086804
+  md5: ebfcf2f266822f006b9b8ebfef80b217
+  # Sanity check to make sure never using wrong image on the wrong model
+  supported_models:
+    - "C1111-4P"
+
+!/group_vars/cisco.yml
+
+---
+backup_dir: "~/CFG_BACKUP"
+
+# Filesystem on remote device must be one of these
+allowed_filesystems:
+  - "flash:"
+  - "bootflash:"
+
+primary_image:
+  name: c1100-universalk9_ias.16.12.03.SPA.bin
+  size: 542086804
+  md5: ebfcf2f266822f006b9b8ebfef80b217
+  # Sanity check to make sure never using wrong image on the wrong model
+  supported_models:
+    - "C1111-4P"
+
+backup_image:
+  name: c1100-universalk9_ias.16.08.01.SPA.bin
+  size: 427968764
+  md5: 8dee04c886aa00ae6c794d7c65f52f9d
+  # Sanity check to make sure never using wrong image on the wrong model
+  supported_models:
+    - "C1111-4P"
+
+# Extra buffer of available space
+extra_space: 10000000
+
+* Here we look at the role to perform the upgrade and reload the device
+
+!/roles/upgrade_device/tasks/main.yml
+
+- name: Update to boot settings to use new image file
+  import_tasks: update_bootsystem.yml
+  tags: bootsystem
+
+- name: Reload the device
+  import_tasks: reload_device.yml
+  tags: reload
+
+!/roles/upgrade_device/tasks/update_bootsystem.yml
+
+- name: Obtain current 'boot system' values (before changes)
+  import_tasks: current_bootsystem.yml
+
+- name: Prompt to continue
+  pause: 
+    prompt: |
+      >>>>>>>>>>>>>>>>>>
+      You are about to change the boot variable on the device.
+      Press "<cntr-c>" and then "a" to abort.
+      Press return to continue.
+      >>>>>>>>>>>>>>>>>>
+- name: Update 'boot system' to new value
+  ios_config:
+    lines:
+      - no boot system
+      - "boot system flash {{ primary_image.name }}"
+      # - "boot system flash {{ backup_image.name }}"
+    # Always save the changes to startup-config
+    save_when: always
+    # Force Ansible to always push all of the lines
+    match: none
+    backup: True
+
+!/roles/upgrade_device/tasks/reload_device.yml
+
+- name: Obtain 'boot system' values (after changes)
+  import_tasks: current_bootsystem.yml
+
+- name: Verify file exists and display its size
+  ios_command:
+    commands: "dir {{ primary_image.name }}"
+  register: dir_output
+
+- set_fact:
+    dir_output: "{{ dir_output.stdout_lines[0] }}"
+
+- name: Perform MD5 (returns 'md5_hash' variable)
+  import_role:
+    name: file_operations
+    tasks_from: md5
+
+- name: Just the facts
+  debug:
+    msg:
+      - '******************************************************'
+      - 'File Exists: {{ dir_output[2] }}'
+      - ''
+      - 'MD5 Value: {{ md5_hash }}'
+      - ''
+      - 'Boot Variable: '
+      - '-------'
+      - '{{ boot_var }}'
+      - ''
+      - '******************************************************'
+
+- name: Prompt to continue
+  pause:
+    prompt: |
+      >>>>>>>>>>>>>>>>>>
+      You are about to reload the device!!! Do you want to continue?
+      Press "<cntr-c>" and then "a" to abort.
+      Press return to continue.
+      >>>>>>>>>>>>>>>>>>
+- name: Reload the device.
+  ios_command:
+    commands:
+      - command: reload
+        prompt: confirm
+        answer: 'y'
+  tags: 
+    - reload_only
+
+- name: Wait until device completes its reboot
+  wait_for:
+    host: "{{ ansible_host }}"
+    port: 22
+    delay: 240
+    timeout: 1800
+  tags: 
+    - reload_only
+
+* Here is the main playbook that is run and calls all the other roles
+
+!upgrade_os.yml
+
+
+---
+- name: OS Upgrade on Cisco IOS-XE devices
+  hosts: do_not_run_this_playbook
+  gather_facts: True
+
+  roles:
+    - upgrade_pre_process
+    - transfer_image
+    - upgrade_device
+    - upgrade_post_process

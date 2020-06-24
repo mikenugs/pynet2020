@@ -1,0 +1,570 @@
+Napalm is a Python library intended to create a uniform interface between your programming code and a set of underlying devices. The Core vendor devices it supports are 
+
+Juniper -> Netconf via PyEz
+Arista -> eAPI via pyeapi
+NX-OS -> NX-API via nxapi plumbing
+IOS-XR -> XML Agent via pyiosxr
+IOS -> SSH via Netmiko
+
+Napalm has both configuration and getter operations.
+
+The Napalm getters are located at the below link
+
+https://napalm.readthedocs.io/en/latest/support/
+
+The nature of the returned data structres should be consistent across the various platforms.
+
+With the config operations it has a..
+
+Config Merge
+Config Replace
+Config Diff
+Discard Config (Drop Pending Changes)
+Config Commit
+Rollback (Rollback to State Before Commit)
+
+To install Napalm Ansible
+
+git clone https://github.com/napalm-automation/napalm-ansible.git
+
+To see the Napalm modules that are available to you
+
+tree -C modules
+
+You will need to update the library and action_plugins path
+
+nano ansible.cfg 
+
+[defaults]
+library = ~/napalm-ansible/napalm_ansible/modules:~/ansible-extras/ntc-ansible\library
+action_plugins = ~/napalm-ansible/napalm_ansible/plugins/action
+
+
+You will want to install Napalm using PIP via the same version of Python that Ansible is installed on. You will then need to update ansible-hosts.ini and ensure that you set it to the version of Python with these packages installed. 
+
+[all:vars]
+ansible_python_interpreter=/home/mikenoc/VENV/ansible/bin/python
+
+Here is an example Napalm getter for Cisco IOS. If you specify facts it will do the get_facts. If you specify under filter interfaces it will grab get_interfaces. The filter is used to change the getters and you will always have napalm_get_facts as the module. When you want to view the specific getter you will add it as a var under debug.
+
+---
+- name: NAPALM get_facts and get_interfaces
+  hosts: cisco5
+  gather_facts: False
+  tasks:
+    - name: napalm get_facts
+      napalm_get_facts:
+        filter: facts
+        # filter: facts,interfaces,lldp_neighbors
+        # filter: lldp_neighbors
+
+    - debug:
+        var: napalm_facts
+        # var: napalm_lldp_neighbors
+        # var: napalm_interfaces
+
+Ansible connection = CLI will be the same thing as connection local. 
+
+[all:vars]
+ansible_connection=network_cli
+
+When using NXOS you must specify port 8443 under optional arguments.
+
+---
+- name: napalm 
+  hosts: nxos1
+  gather_facts: False
+  tasks:
+    - name: Retrieve get_facts, get_interfaces
+      napalm_get_facts:
+        filter: facts,interfaces
+        optional_args:
+          port: 8443
+
+    - debug:
+        var: napalm_facts
+
+Example using Napalm on a Junos device
+
+---
+- name: napalm 
+  hosts: juniper
+  gather_facts: False
+  tasks:
+    - name: Retrieve get_facts, get_interfaces
+      napalm_get_facts:
+        filter: facts,interfaces
+
+    - debug:
+        var: napalm_facts
+
+Here we use 2 Napalm getters one for ARP and the other for the MAC address table and we print them out. 
+
+---
+- name: NAPALM get_arp_table and get_mac_address_table
+  hosts: cisco
+  gather_facts: False
+  tasks:
+    - name: napalm getters
+      napalm_get_facts:
+        filter: arp_table,mac_address_table
+
+    - debug:
+        var: napalm_arp_table
+
+    - debug:
+        var: napalm_mac_address_table
+
+Here we have a playbook that uses a single task to grab lldp neighbor information from multiple devices of different vendor types. To do this we had to specify the port for each and every device type in the inventory file. 
+
+---
+- name: napalm multiple platforms
+  hosts: arista:cisco:nxos
+  gather_facts: False
+  vars:
+    # Added this so I didn't need a custom inventory file.
+    napalm_port:
+        eos: 443
+        ios: 22
+        nxos: 8443
+        junos: 830
+  tasks:
+    - name: LLDP
+      napalm_get_facts:
+        filter: lldp_neighbors
+        optional_args:
+          port: "{{ napalm_port[ansible_network_os] }}"
+      register: output
+
+    - debug:
+        var: napalm_lldp_neighbors
+
+!ansible-hosts.ini
+
+[all:vars]
+ansible_connection=network_cli
+ansible_python_interpreter=/home/student5/VENV/ansible/bin/python
+
+[local]
+localhost ansible_connection=local
+
+[arista]
+arista5 ansible_host=arista5.lasthop.io
+arista6 ansible_host=arista6.lasthop.io
+arista7 ansible_host=arista7.lasthop.io
+arista8 ansible_host=arista8.lasthop.io
+
+[arista:vars]
+ansible_network_os=eos
+
+[cisco]
+cisco1 ansible_host=cisco1.lasthop.io
+cisco2 ansible_host=cisco2.lasthop.io
+cisco5 ansible_host=cisco5.lasthop.io
+cisco6 ansible_host=cisco6.lasthop.io
+
+[cisco:vars]
+ansible_network_os=ios
+napalm_port=22
+
+[juniper]
+srx1 ansible_host=srx1.lasthop.io
+
+[juniper:vars]
+ansible_network_os=junos
+napalm_port=830
+
+[nxos]
+nxos1 ansible_host=nxos1.lasthop.io
+nxos2 ansible_host=nxos2.lasthop.io
+
+[nxos:vars]
+ansible_network_os=nxos
+napalm_port=8443
+
+
+When using SSH instead of a Netconf API you can specify SSH in the dev_os field. 
+
+---
+- name: napalm nxos_ssh
+  hosts: nxos1
+  gather_facts: False
+  tasks:
+    - name: Retrieve get_facts, get_interfaces
+      napalm_get_facts:
+        filter: facts,interfaces
+        dev_os: nxos_ssh
+
+    - debug:
+        var: napalm_facts
+napalm_port=443
+
+Napalm also has a ping module that will force a device to do a ICMP ping. Regardless of wether the ping succseeds or fails you will see ping_results.success. It will send five packets by default. 
+
+---
+- name: NAPALM Ping
+  hosts: arista:cisco:juniper
+  gather_facts: False
+  tasks:
+    - name: NAPALM ping
+      napalm_ping: 
+        destination: 8.8.8.8
+      register: ping_output
+
+    - debug:
+        msg: 
+          - "Pings sent: {{ ping_output.ping_results.success.probes_sent }}"
+          - "Packet loss: {{ ping_output.ping_results.success.packet_loss }}"
+
+    - debug:
+        msg: "------- PING FAILED --------"
+      when: ping_output.ping_results.success.packet_loss > 1
+
+All Napalm configurations create a candidate configuration. You can compare the configs merge and replace, discard, commit it and rollback the configuration. 
+
+Napalm and ACID transactions
+
+A = Atomic Transaction (all or nothing)
+C = Consistent Transaction (at every point in time our system must be in a valid state)
+I = Isolation (transactions executed concurrently must achieve the same result as sequential transactions)
+D = Durable Transactions (survive/recover from power failure)
+
+A = This really means that we send up the config and we want to make sure that either all or none of our changes fo through. That way if there is an error at any part of the config we want it to revert back to the previous state. That way Napalm does not leave a partial configuration in place.
+
+C = With Consistent the device should have the ability to tell us if we are performing a config that is invalid. Take for example we are adding static routes to an interface that does not exist. We would want to device to tell us.
+
+I = You could have multiple transactions or changes going on at the same time without causing an issue. So a change that would work sequentlialy should work if it was done in parrelel. This is something that likely Napalm cannot help much with.
+
+D = When Napalm completes changes they should go to the running and startup config. So in case of a power outage it should start up correctly. 
+
+* Napalm Merge
+
+Since replace config is set to False we will be doing a merge. We also are not commiting the changes and are generating a DIFFS of the config change. The | gives us a multiline YAML string with the config to add. 
+
+
+---
+- name: Test napalm merge
+  hosts: arista5
+  gather_facts: False
+  tasks:
+    - napalm_install_config:
+        replace_config: False
+        commit_changes: False
+        diff_file: "DIFFS/{{ inventory_hostname }}.txt"
+        config: | 
+         interface Loopback98
+            ip address 172.31.98.1/24
+         interface Loopback99
+            ip address 172.31.99.1/24
+
+Here we specify a config file to use to make the config change as apposed to specifying the lines of config using the Napaolm Core module.
+
+---
+- name: Test napalm merge
+  hosts: arista5
+  gather_facts: False
+  tasks:
+    - napalm_install_config:
+        replace_config: False
+        commit_changes: False
+        config_file: "CFGS/{{ inventory_hostname }}-merge.txt"
+        diff_file: "DIFFS/{{ inventory_hostname }}.txt"
+
+!CFGS/arista5-merge.txt
+
+logging buffered 50000
+
+Here we have an example where we specify multiple devices to push the configuration to. We specify optional args to ensure that we have the correct NAPALM port for each device type. 
+
+---
+
+- name: Test napalm merge
+  hosts: arista5:cisco1:srx1:nxos1
+  gather_facts: False
+  vars:
+    # Added this so I didn't need a custom inventory file.
+    napalm_port:
+        eos: 443
+        ios: 22
+        nxos: 8443
+        junos: 830
+  tasks:
+    - napalm_install_config:
+        replace_config: False
+        commit_changes: False
+        config_file: "CFGS/{{ inventory_hostname }}-merge.txt"
+        diff_file: "DIFFS/{{ inventory_hostname }}.txt"
+        optional_args:
+          port: "{{ napalm_port[ansible_network_os] }}"
+
+!CFGS/arista5-merge.txt
+
+logging buffered 50000
+
+!/CFGS/cisco1-merge.txt
+
+logging buffered 50000
+
+!/CFGS/nxos1-merge.txt
+
+logging monitor 0
+
+!/CFGS/srx1-merge.txt
+
+system {
+  syslog {
+        archive size 240k files 3;
+  }
+}
+
+* Napalm Config Replace
+
+Here we set replace_config to True so we will replace the entire config. To make this work you need secure copy enabled for IOS. 
+
+ip scp server enable
+
+You will also need archive enabled as well. 
+
+archive
+  log config
+  logging enable
+  path bootflash:archive
+  write memory
+
+Napalm will create a candidate config in flash prior to loading the new candidate config to the box. 
+
+---
+- name: Cisco IOS Full Config Replace
+  hosts: cisco5
+  gather_facts: False
+  tasks:
+    - napalm_install_config:
+        replace_config: True
+        commit_changes: False
+        config_file: "CFGS/{{ inventory_hostname }}-default.txt"
+        diff_file: "DIFFS/{{ inventory_hostname }}.txt"
+
+
+!/CFGS/cisco5-default.txt
+
+!
+hostname cisco5
+!
+boot-start-marker
+boot-end-marker
+!
+ip route 0.0.0.0 0.0.0.0 10.0.2.2
+!
+ip ssh version 2
+ip scp server enable
+!
+!
+!
+!
+!
+control-plane
+!
+!
+!
+!
+!
+!
+line con 0
+ logging synchronous
+ stopbits 1
+line vty 0 4
+ exec-timeout 20 0
+ login local
+ transport input telnet ssh
+!
+ntp server 130.126.24.24
+ntp server 152.2.21.1
+
+
+If you have an SSL certificate it will get distorted when you copy it over because the last quit has a tab character. A banner login which has a Ctrl C it is not a valid character so it can get distorted with a copy and paste. You should use napalm_get_config to grab the config. You will also need to delete the building config and the next few lines about NVRAM that are not needed from the file you are creating. 
+
+---
+- name: Retrieve running configuration
+  hosts: cisco5:srx1
+  gather_facts: False
+  tasks:
+    - name: get_config
+      napalm_get_facts:
+        filter: config
+
+    - debug:
+        msg: "{{ napalm_config.running.splitlines() }}"
+
+    - name: Save the config locally
+      copy:
+        content: "{{ napalm_config.running }}"
+        dest: "{{ inventory_hostname }}.txt"
+
+When using configuration replace on a Nexus device you will want to ensure that Secure Copy is enabled
+
+feature scp-server
+
+With the Nexus you have to use check point files for the replace operation. 
+
+---
+- name: Retrieve Checkpoint File
+  hosts: nxos2
+  gather_facts: False
+  tasks:
+    - name: Retrieve checkpoint
+      napalm_get_facts:
+        filter: checkpoint_file
+        optional_args:
+          port: 8443
+
+    - name: Save the checkpoint
+      copy:
+        content: "{{ napalm_checkpoint_file }}"
+        dest: "{{ inventory_hostname }}.txt"
+
+Here we have a config replace for a Nexus device
+
+---
+- name: NX-OS Full Config Replace
+  hosts: nxos2
+  gather_facts: False
+  tasks:
+    - napalm_install_config:
+        replace_config: True
+        commit_changes: False
+        config_file: "CFGS/{{ inventory_hostname }}-default.txt"
+        diff_file: "DIFFS/{{ inventory_hostname }}.txt"
+        optional_args:
+            port: 8443
+
+* Napalm and Jinja2 templating from Golden Config
+
+Here we have a playbook that grabs the running configs
+
+---
+- name: Retrieve running configuration
+  hosts: arista
+  gather_facts: False
+  tasks:
+    - name: get_config
+      napalm_get_facts:
+        filter: config
+
+    - name: Save the config locally
+      copy:
+        content: "{{ napalm_config.running }}"
+        dest: "{{ inventory_hostname }}.txt"
+
+Right now our jinja2 template has no jinja2 constructs we just copy the running config over to a new destination folder. The files should be identical. 
+
+---
+- name: Generate configuration from a template
+  hosts: arista
+  gather_facts: False
+  tasks:
+    - name: Template individual file
+      template:
+        src: "templates/{{ ansible_network_os }}_original/{{ inventory_hostname }}.txt"
+        dest: "CFGS/{{ inventory_hostname }}-load.txt"
+
+
+To find out what you need to templatize one thing you can do is diff two files for Arista configs to see what is different between them
+
+diff arista5.txt arista6.txt
+
+Here we have out new playbook that takes the templated config we create and copies that to the CFGS directory. This will have a template per device as apposed to a single template for all devices.
+
+---
+- name: Generate configuration from a template
+  hosts: arista
+  gather_facts: False
+  tasks:
+    - name: Template individual file
+      template:
+        src: "templates/{{ ansible_network_os }}_tpl_1/{{ inventory_hostname }}.txt"
+        dest: "CFGS/{{ inventory_hostname }}-load.txt"
+
+!/group_vars/all.yml
+
+---
+domain_name: lasthop.io
+ntp_server1: 130.126.24.24
+ntp_server2: 152.2.21.1
+dns_server1: 8.8.8.8
+dns_server2: 8.8.4.4
+
+!/templates/eos_tpl_1/arista5.txt
+
+! Command: show running-config
+! device: arista5 (vEOS, EOS-4.20.10M)
+!
+! boot system flash:/vEOS-lab.swi
+!
+transceiver qsfp default-mode 4x10G
+!
+hostname {{ inventory_hostname }}
+ip name-server vrf default {{ dns_server1 }}
+ip name-server vrf default {{ dns_server2 }}
+ip domain-name {{ domain_name }}
+!
+ntp server {{ ntp_server1 }}
+ntp server {{ ntp_server2 }}
+!
+spanning-tree mode rapid-pvst
+!
+aaa authorization exec default local
+!
+no aaa root
+!
+
+You can run the playbook in check mode to see if there is a diff but not actually make any changes
+
+ansible-playbook gen_config2.yml --check --diff
+
+
+Now we will take a look at an example template that uses a single template to create configs for multiple devices
+
+
+---
+- name: Generate configuration from a template
+  hosts: arista
+  gather_facts: False
+  tasks:
+    - name: Template from a common template
+      template:
+        src: "templates/{{ ansible_network_os }}_tpl_2/arista-tpl.j2"
+        dest: "CFGS/{{ inventory_hostname }}-load.txt"
+      tags: template
+
+    - name: Install configurations
+      napalm_install_config:
+        replace_config: True
+        commit_changes: False
+        config_file: "CFGS/{{ inventory_hostname }}-load.txt"
+        diff_file: "DIFFS/{{ inventory_hostname }}.txt"
+      tags: deploy
+
+!/templates/eos_tpl_2/arista-tpl.j2
+
+!
+! boot system flash:/vEOS-lab.swi
+!
+transceiver qsfp default-mode 4x10G
+!
+hostname {{ inventory_hostname }}
+ip name-server vrf default {{ dns_server1 }}
+ip name-server vrf default {{ dns_server2 }}
+ip domain-name {{ domain_name }}
+!
+ntp server {{ ntp_server1 }}
+ntp server {{ ntp_server2 }}
+!
+spanning-tree mode rapid-pvst
+!
+aaa authorization exec default local
+!
+no aaa root
+!
+username admin privilege 15 role network-admin secret 5 $1$aM6w809x$tgkc6ZGhcScvELVKVHq3n0
+username admin1 privilege 15 secret 5 $1$7kD0oS/t$wXhtTFwnWwnlPFKWwXoJ70
+username eapi secret 5 {{ eapi_secret }}
